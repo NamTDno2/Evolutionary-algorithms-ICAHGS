@@ -1,64 +1,71 @@
 #include "InputReader.h"
 #include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <cctype>
 
-bool InputReader::readInstance(const std::string& filename, Instance& instance) {
-    std::ifstream file(filename);
+using namespace std;
+
+bool InputReader::readInstance(const string& filename, Instance& instance) {
+    ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Cannot open file: " << filename << std::endl;
+        cerr << "Cannot open file: " << filename << endl;
         return false;
     }
     
-    std::string line;
+    string line;
     
-    // Read number_staff
-    if (std::getline(file, line)) {
+    // Read number_staff (giả sử dòng có dạng "key value")
+    if (getline(file, line)) {
         auto parts = split(line, ' ');
         if (parts.size() >= 2) {
-            instance.numTrucks = std::stoi(parts);
+            instance.numTrucks = stoi(parts[1]);
         }
     }
     
     // Read number_drone
-    if (std::getline(file, line)) {
+    if (getline(file, line)) {
         auto parts = split(line, ' ');
         if (parts.size() >= 2) {
-            instance.numDrones = std::stoi(parts);
+            instance.numDrones = stoi(parts[1]);
         }
     }
     
     // Read droneLimitationFightTime
-    if (std::getline(file, line)) {
+    if (getline(file, line)) {
         auto parts = split(line, ' ');
         if (parts.size() >= 2) {
-            instance.droneParams.maxFlightTime = std::stod(parts);
+            instance.droneParams.maxFlightTime = stod(parts[1]);
         }
     }
     
     // Read Customers count
     int numCustomers = 0;
-    if (std::getline(file, line)) {
+    if (getline(file, line)) {
         auto parts = split(line, ' ');
         if (parts.size() >= 2) {
-            numCustomers = std::stoi(parts);
+            numCustomers = stoi(parts[1]);
         }
     }
     
     // Skip header line
-    std::getline(file, line);
+    getline(file, line);
     
     // Read customers
     for (int i = 0; i < numCustomers; i++) {
-        if (std::getline(file, line)) {
+        if (getline(file, line)) {
             auto parts = split(line, ' ');
             if (parts.size() >= 6) {
                 Customer cust;
                 cust.id = i + 1;
-                cust.x = std::stod(parts);
-                cust.y = std::stod(parts);
-                cust.demand = std::stod(parts);
-                cust.isStaffOnly = (std::stoi(parts) == 1);
-                cust.serviceTimeTruck = std::stod(parts);
-                cust.serviceTimeDrone = std::stod(parts);
+                
+                cust.x = stod(parts[0]);
+                cust.y = stod(parts[1]);
+                cust.demand = stod(parts[2]);
+                cust.isStaffOnly = (stoi(parts[3]) == 1);
+                cust.serviceTimeTruck = stod(parts[4]);
+                cust.serviceTimeDrone = stod(parts[5]);
                 
                 instance.customers.push_back(cust);
             }
@@ -66,26 +73,26 @@ bool InputReader::readInstance(const std::string& filename, Instance& instance) 
     }
     
     // Read Beta
-    if (std::getline(file, line)) {
+    if (getline(file, line)) {
         // Skip "Beta" label
     }
-    if (std::getline(file, line)) {
-        instance.droneParams.beta = std::stod(line);
+    if (getline(file, line)) {
+        instance.droneParams.beta = stod(line);
     }
     
     file.close();
     
-    // Set default parameters (should be read from config)
-    instance.droneParams.maxCapacity = 5.0;  // kg
-    instance.droneParams.maxEnergy = 500.0;  // kJ
-    instance.droneParams.takeoffSpeed = 5.0;  // m/s
-    instance.droneParams.cruiseSpeed = 15.0;  // m/s
-    instance.droneParams.landingSpeed = 5.0;  // m/s
-    instance.droneParams.gamma = 100.0;  // W
+    // Set default parameters
+    instance.droneParams.maxCapacity = 5.0;
+    instance.droneParams.maxEnergy = 500.0;
+    instance.droneParams.takeoffSpeed = 5.0;
+    instance.droneParams.cruiseSpeed = 15.0;
+    instance.droneParams.landingSpeed = 5.0;
+    instance.droneParams.gamma = 100.0;
     
-    instance.truckParams.maxSpeed = 20.0;  // m/s
+    instance.truckParams.maxSpeed = 20.0;
     
-    // Create simple time intervals (can be extended)
+    // Create simple time intervals
     instance.truckParams.timeIntervals.push_back(TimeInterval(0, 3600, 0.8));
     instance.truckParams.timeIntervals.push_back(TimeInterval(3600, 7200, 1.0));
     instance.truckParams.timeIntervals.push_back(TimeInterval(7200, 14400, 0.8));
@@ -93,25 +100,23 @@ bool InputReader::readInstance(const std::string& filename, Instance& instance) 
     return true;
 }
 
-std::vector<std::string> InputReader::split(const std::string& s, char delimiter) {
-    std::vector<std::string> tokens;
-    std::string token;
-    std::istringstream tokenStream(s);
+vector<string> InputReader::split(const string& s, char delimiter) {
+    vector<string> tokens;
+    string token;
+    istringstream tokenStream(s);
     
-    while (std::getline(tokenStream, token, delimiter)) {
-        trim(token);
-        if (!token.empty()) {
-            tokens.push_back(token);
-        }
+    // Sử dụng toán tử trích xuất (>>) để xử lý mọi loại khoảng trắng
+    while (tokenStream >> token) {
+        tokens.push_back(token);
     }
     return tokens;
 }
 
-void InputReader::trim(std::string& s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-        return !std::isspace(ch);
+void InputReader::trim(string& s) {
+    s.erase(s.begin(), find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !isspace(ch);
     }));
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
-        return !std::isspace(ch);
+    s.erase(find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !isspace(ch);
     }).base(), s.end());
 }

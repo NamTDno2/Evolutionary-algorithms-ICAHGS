@@ -1,26 +1,49 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Project",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\build\\main.exe",
+      "args": [
+        "data/6.5.1.txt"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "C:\\msys64\\ucrt64\\bin\\gdb.exe",
+      "setupCommands": [
         {
-            "name": "Debug Project",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}\\build\\output.exe",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "miDebuggerPath": "C:\\msys64\\ucrt64\\bin\\gdb.exe",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ],
-            "preLaunchTask": "Build Project"  // Trùng label ở tasks.json
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
         }
-    ]
+      ],
+      "preLaunchTask": "Build Project"
+    },
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "cppdbg",
+      "request": "launch",
+      "args": [
+        "data/6.5.1.txt"
+      ],
+      "stopAtEntry": false,
+      "externalConsole": false,
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}\\build\\main.exe",
+      "MIMode": "gdb",
+      "miDebuggerPath": "C:\\msys64\\ucrt64\\bin\\gdb.exe",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
 }

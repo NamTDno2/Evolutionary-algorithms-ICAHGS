@@ -4,6 +4,9 @@
 #include <vector>
 #include <string>
 #include <limits>
+#include <cmath> 
+
+using namespace std;
 
 // Constants
 const double INF = std::numeric_limits<double>::infinity();

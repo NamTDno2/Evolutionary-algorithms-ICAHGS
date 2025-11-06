@@ -1,6 +1,11 @@
 #include "Solution.h"
 #include <algorithm>
 #include <cmath>
+#include <vector> // Thêm thư viện này
+
+using namespace std;
+
+// === SolutionEvaluator Class ===
 
 void SolutionEvaluator::evaluate(Solution& solution) {
     double maxCompletionTime = 0;
@@ -9,8 +14,8 @@ void SolutionEvaluator::evaluate(Solution& solution) {
     // Evaluate truck routes
     for (size_t i = 0; i < solution.truckRoutes.size(); i++) {
         evaluateTruckRoute(solution.truckRoutes[i], i);
-        maxCompletionTime = std::max(maxCompletionTime, 
-                                     solution.truckRoutes[i].completionTime);
+        maxCompletionTime = max(maxCompletionTime, 
+                                  solution.truckRoutes[i].completionTime);
         totalWaiting += solution.truckRoutes[i].totalWaitingTime;
     }
     
@@ -18,11 +23,11 @@ void SolutionEvaluator::evaluate(Solution& solution) {
     for (size_t i = 0; i < solution.droneRoutes.size(); i++) {
         for (auto& route : solution.droneRoutes[i]) {
             if (evaluateDroneRoute(route, i)) {
-                maxCompletionTime = std::max(maxCompletionTime, 
-                                           route.completionTime);
+                maxCompletionTime = max(maxCompletionTime, 
+                                          route.completionTime);
                 totalWaiting += route.totalWaitingTime;
             } else {
-                // Infeasible route (energy constraint violated)
+                // Infeasible route
                 solution.systemCompletionTime = INF;
                 solution.totalSampleWaitingTime = INF;
                 return;
@@ -43,17 +48,14 @@ void SolutionEvaluator::evaluateTruckRoute(Route& route, int truckId) {
     
     double currentTime = 0;
     double totalWaiting = 0;
-    int prevNode = 0;  // Start from depot
+    int prevNode = 0; // Start from depot
     
     for (int custId : route.customers) {
-        // Travel time
         double distance = instance.getDistance(prevNode, custId);
         double travelTime = calculateTruckTravelTime(currentTime, distance);
         currentTime += travelTime;
         
-        // Service time
         double serviceTime = instance.customers[custId - 1].serviceTimeTruck;
-        double collectTime = currentTime;
         currentTime += serviceTime;
         
         prevNode = custId;
@@ -66,7 +68,7 @@ void SolutionEvaluator::evaluateTruckRoute(Route& route, int truckId) {
     
     route.completionTime = currentTime;
     
-    // Calculate waiting time for all samples
+    // Calculate waiting time
     double returnTime = currentTime;
     currentTime = 0;
     prevNode = 0;
@@ -76,11 +78,10 @@ void SolutionEvaluator::evaluateTruckRoute(Route& route, int truckId) {
         double travelTime = calculateTruckTravelTime(currentTime, distance);
         currentTime += travelTime;
         
-        double serviceTime = instance.customers[custId - 1].serviceTimeTruck;
         double collectTime = currentTime;
+        double serviceTime = instance.customers[custId - 1].serviceTimeTruck;
         currentTime += serviceTime;
         
-        // Waiting time = return time - collection time
         totalWaiting += (returnTime - collectTime);
         
         prevNode = custId;
@@ -96,24 +97,19 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
         return true;
     }
     
-    // Check energy feasibility
-    double energyConsumed = calculateDroneEnergy(route);
-    if (energyConsumed > instance.droneParams.maxEnergy) {
-        return false;  // Infeasible
-    }
-    
-    // Check capacity
     double totalLoad = 0;
     for (int custId : route.customers) {
         totalLoad += instance.customers[custId - 1].demand;
     }
     if (totalLoad > instance.droneParams.maxCapacity) {
-        return false;  // Infeasible
+        return false;
     }
-    
-    // Calculate completion time
+
+    if (calculateDroneEnergy(route) > instance.droneParams.maxEnergy) {
+        return false;
+    }
+
     double currentTime = 0;
-    double currentLoad = totalLoad;
     int prevNode = 0;
     
     for (int custId : route.customers) {
@@ -124,11 +120,9 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
         double serviceTime = instance.customers[custId - 1].serviceTimeDrone;
         currentTime += serviceTime;
         
-        currentLoad -= instance.customers[custId - 1].demand;
         prevNode = custId;
     }
     
-    // Return to depot
     double distance = instance.getDistance(prevNode, 0);
     currentTime += distance / instance.droneParams.cruiseSpeed;
     
@@ -157,8 +151,7 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     return true;
 }
 
-double SolutionEvaluator::calculateTruckTravelTime(double startTime, 
-                                                    double distance) {
+double SolutionEvaluator::calculateTruckTravelTime(double startTime, double distance) {
     double time = 0;
     double remainingDist = distance;
     double currentTime = startTime;
@@ -167,11 +160,9 @@ double SolutionEvaluator::calculateTruckTravelTime(double startTime,
         double sigma = getSpeedFactor(currentTime);
         double speed = instance.truckParams.maxSpeed * sigma;
         
-        // Find time interval boundary
         double intervalEnd = INF;
         for (const auto& interval : instance.truckParams.timeIntervals) {
-            if (currentTime >= interval.startTime && 
-                currentTime < interval.endTime) {
+            if (currentTime >= interval.startTime && currentTime < interval.endTime) {
                 intervalEnd = interval.endTime;
                 break;
             }
@@ -199,7 +190,6 @@ double SolutionEvaluator::calculateDroneEnergy(const Route& route) {
     double totalEnergy = 0;
     double currentLoad = 0;
     
-    // Calculate total load
     for (int custId : route.customers) {
         currentLoad += instance.customers[custId - 1].demand;
     }
@@ -210,27 +200,19 @@ double SolutionEvaluator::calculateDroneEnergy(const Route& route) {
         double distance = instance.getDistance(prevNode, custId);
         double travelTime = distance / instance.droneParams.cruiseSpeed;
         
-        // Power = beta * load + gamma (Watts)
-        double power = instance.droneParams.beta * currentLoad + 
-                       instance.droneParams.gamma;
-        
-        // Energy = Power * Time (Joules = Watt * seconds)
+        double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
         double energy = power * travelTime;
         totalEnergy += energy;
         
-        // Update load after serving customer
         currentLoad -= instance.customers[custId - 1].demand;
         prevNode = custId;
     }
     
-    // Return to depot
     double distance = instance.getDistance(prevNode, 0);
     double travelTime = distance / instance.droneParams.cruiseSpeed;
-    double power = instance.droneParams.beta * currentLoad + 
-                   instance.droneParams.gamma;
+    double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
     totalEnergy += power * travelTime;
     
-    // Convert to kJ
     return totalEnergy / 1000.0;
 }
 
@@ -240,21 +222,23 @@ double SolutionEvaluator::getSpeedFactor(double time) const {
             return interval.sigma;
         }
     }
-    // Return last interval's sigma if beyond all intervals
     if (!instance.truckParams.timeIntervals.empty()) {
         return instance.truckParams.timeIntervals.back().sigma;
     }
     return 1.0;
 }
 
-void ParetoRanking::nonDominatedSorting(std::vector<Solution*>& solutions) {
+
+// === ParetoRanking Class ===
+
+void ParetoRanking::nonDominatedSorting(vector<Solution*>& solutions) {
     int n = solutions.size();
-    std::vector<int> dominationCount(n, 0);
-    std::vector<std::vector<int>> dominatedSolutions(n);
-    std::vector<std::vector<int>> fronts;
-    std::vector<int> currentFront;
+    vector<int> dominationCount(n, 0);
+    vector<vector<int>> dominatedSolutions(n);
+    vector<vector<int>> fronts;
     
-    // Find domination relationships
+    vector<int> currentFront;
+    
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (solutions[i]->dominates(*solutions[j])) {
@@ -274,10 +258,9 @@ void ParetoRanking::nonDominatedSorting(std::vector<Solution*>& solutions) {
     
     fronts.push_back(currentFront);
     
-    // Build subsequent fronts
     int rank = 1;
     while (!currentFront.empty()) {
-        std::vector<int> nextFront;
+        vector<int> nextFront;
         for (int i : currentFront) {
             for (int j : dominatedSolutions[i]) {
                 dominationCount[j]--;
@@ -294,17 +277,16 @@ void ParetoRanking::nonDominatedSorting(std::vector<Solution*>& solutions) {
         rank++;
     }
     
-    // Calculate crowding distance for each front
-    for (auto& front : fronts) {
-        std::vector<Solution*> frontSols;
-        for (int idx : front) {
+    for (auto& frontIndexes : fronts) {
+        vector<Solution*> frontSols;
+        for (int idx : frontIndexes) {
             frontSols.push_back(solutions[idx]);
         }
         calculateCrowdingDistance(frontSols);
     }
 }
 
-void ParetoRanking::calculateCrowdingDistance(std::vector<Solution*>& front) {
+void ParetoRanking::calculateCrowdingDistance(vector<Solution*>& front) {
     int n = front.size();
     if (n <= 2) {
         for (auto* sol : front) {
@@ -313,33 +295,27 @@ void ParetoRanking::calculateCrowdingDistance(std::vector<Solution*>& front) {
         return;
     }
     
-    // Initialize
     for (auto* sol : front) {
         sol->crowdingDistance = 0;
     }
     
-    // For each objective
     for (int obj = 0; obj < 2; obj++) {
-        // Sort by objective
-        std::sort(front.begin(), front.end(), [obj](Solution* a, Solution* b) {
+        sort(front.begin(), front.end(), [obj](Solution* a, Solution* b) {
             if (obj == 0) return a->systemCompletionTime < b->systemCompletionTime;
             else return a->totalSampleWaitingTime < b->totalSampleWaitingTime;
         });
         
-        // Boundary points have infinite distance
-        front->crowdingDistance = INF;
+        front[0]->crowdingDistance = INF;
         front[n-1]->crowdingDistance = INF;
         
-        // Normalized range
-        double objMin = (obj == 0) ? front->systemCompletionTime 
-                                   : front->totalSampleWaitingTime;
+        double objMin = (obj == 0) ? front[0]->systemCompletionTime 
+                                   : front[0]->totalSampleWaitingTime;
         double objMax = (obj == 0) ? front[n-1]->systemCompletionTime 
                                    : front[n-1]->totalSampleWaitingTime;
         double range = objMax - objMin;
         
         if (range < 1e-6) continue;
         
-        // Calculate crowding distance
         for (int i = 1; i < n - 1; i++) {
             double prev = (obj == 0) ? front[i-1]->systemCompletionTime 
                                      : front[i-1]->totalSampleWaitingTime;

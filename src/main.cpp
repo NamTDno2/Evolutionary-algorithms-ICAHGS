@@ -4,108 +4,121 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <string>
+#include <vector>
+#include <algorithm> // Cần cho hàm min
+#include <ctime>     // Cần cho hàm clock
+
+using namespace std;
 
 void printSolution(const Solution& solution, int index) {
-    std::cout << "\n--- Solution " << index << " ---" << std::endl;
-    std::cout << "System Completion Time: " << std::fixed << std::setprecision(2) 
-              << solution.systemCompletionTime << " seconds" << std::endl;
-    std::cout << "Total Sample Waiting Time: " << solution.totalSampleWaitingTime 
-              << " seconds" << std::endl;
+    cout << "\n--- Solution " << index << " ---" << endl;
+    cout << "System Completion Time: " << fixed << setprecision(2) 
+         << solution.systemCompletionTime << " seconds" << endl;
+    cout << "Total Sample Waiting Time: " << solution.totalSampleWaitingTime 
+         << " seconds" << endl;
     
-    std::cout << "\nTruck Routes:" << std::endl;
+    cout << "\nTruck Routes:" << endl;
     for (size_t i = 0; i < solution.truckRoutes.size(); i++) {
         const auto& route = solution.truckRoutes[i];
         if (!route.isEmpty()) {
-            std::cout << "  Truck " << i << ": Depot -> ";
+            cout << "  Truck " << i << ": Depot -> ";
             for (int cust : route.customers) {
-                std::cout << cust << " -> ";
+                cout << cust << " -> ";
             }
-            std::cout << "Depot (Completion: " << route.completionTime 
-                      << "s)" << std::endl;
+            cout << "Depot (Completion: " << route.completionTime 
+                 << "s)" << endl;
         }
     }
     
-    std::cout << "\nDrone Routes:" << std::endl;
+    cout << "\nDrone Routes:" << endl;
     for (size_t i = 0; i < solution.droneRoutes.size(); i++) {
         const auto& trips = solution.droneRoutes[i];
         if (!trips.empty()) {
-            std::cout << "  Drone " << i << ":" << std::endl;
+            cout << "  Drone " << i << ":" << endl;
             for (size_t j = 0; j < trips.size(); j++) {
-                std::cout << "    Trip " << j << ": Depot -> ";
+                cout << "    Trip " << j << ": Depot -> ";
                 for (int cust : trips[j].customers) {
-                    std::cout << cust << " -> ";
+                    cout << cust << " -> ";
                 }
-                std::cout << "Depot (Completion: " << trips[j].completionTime 
-                          << "s)" << std::endl;
+                cout << "Depot (Completion: " << trips[j].completionTime 
+                      << "s)" << endl;
             }
         }
     }
 }
 
-void exportResults(const std::vector<Solution>& paretoFront, 
-                  const std::string& filename) {
-    std::ofstream file(filename);
+void exportResults(const vector<Solution>& paretoFront, 
+                   const string& filename) {
+    ofstream file(filename);
     
     if (!file.is_open()) {
-        std::cerr << "Cannot open output file: " << filename << std::endl;
+        cerr << "Cannot open output file: " << filename << endl;
         return;
     }
     
-    file << "SolutionID,CompletionTime,TotalWaitingTime" << std::endl;
+    file << "SolutionID,CompletionTime,TotalWaitingTime" << endl;
     
     for (size_t i = 0; i < paretoFront.size(); i++) {
         file << i << "," 
              << paretoFront[i].systemCompletionTime << ","
-             << paretoFront[i].totalSampleWaitingTime << std::endl;
+             << paretoFront[i].totalSampleWaitingTime << endl;
     }
     
     file.close();
-    std::cout << "\nResults exported to: " << filename << std::endl;
+    cout << "\nResults exported to: " << filename << endl;
 }
 
 int main(int argc, char* argv[]) {
-    std::cout << "=== ICAHGS for MSSVTDE ===" << std::endl;
+    cout << "=== ICAHGS for MSSVTDE ===" << endl;
     
-    // Read instance
-    std::string filename = "data/instance_example.txt";
+    string filename = "data/6.5.1.txt";
     if (argc > 1) {
-        filename = argv;
+        filename = argv[1];
     }
     
     Instance instance;
     if (!InputReader::readInstance(filename, instance)) {
-        std::cerr << "Failed to read instance file." << std::endl;
+        cerr << "Failed to read instance file." << endl;
         return 1;
     }
     
-    std::cout << "\nInstance loaded successfully!" << std::endl;
-    std::cout << "  Customers: " << instance.getNumCustomers() << std::endl;
-    std::cout << "  Trucks: " << instance.numTrucks << std::endl;
-    std::cout << "  Drones: " << instance.numDrones << std::endl;
+    cout << "\nInstance loaded successfully!" << endl;
+    cout << "  Customers: " << instance.getNumCustomers() << endl;
+    cout << "  Trucks: " << instance.numTrucks << endl;
+    cout << "  Drones: " << instance.numDrones << endl;
     
-    // Run ICAHGS
     int populationSize = 50;
     int numEmpires = 5;
     int maxIterations = 100;
     
-    if (argc > 2) populationSize = std::stoi(argv);
-    if (argc > 3) numEmpires = std::stoi(argv);
-    if (argc > 4) maxIterations = std::stoi(argv);
+    if (argc > 2) populationSize = stoi(argv[2]);
+    if (argc > 3) numEmpires = stoi(argv[3]);
+    if (argc > 4) maxIterations = stoi(argv[4]);
     
     ICAHGS algorithm(instance, populationSize, numEmpires);
     
-    auto startTime = std::clock();
-    std::vector<Solution> paretoFront = algorithm.run(maxIterations);
-    auto endTime = std::clock();
+    auto startTime = clock();
+    vector<Solution> paretoFront = algorithm.run(maxIterations);
+    auto endTime = clock();
     
     double elapsedTime = double(endTime - startTime) / CLOCKS_PER_SEC;
     
-    std::cout << "\n=== Results ===" << std::endl;
-    std::cout << "Computation time: " << elapsedTime << " seconds" << std::endl;
-    std::cout << "Pareto front size: " << paretoFront.size() << std::endl;
+    cout << "\n=== Results ===" << endl;
+    cout << "Computation time: " << elapsedTime << " seconds" << endl;
+    cout << "Pareto front size: " << paretoFront.size() << endl;
     
-    // Print top 5 solutions
-    int numToPrint = std::min(5, static_cast<int>(paretoFront.size()));
+    // Sắp xếp Pareto front để hiển thị kết quả đa dạng
+    sort(paretoFront.begin(), paretoFront.end(), 
+              [](const Solution& a, const Solution& b) {
+        if (a.systemCompletionTime != b.systemCompletionTime) {
+            return a.systemCompletionTime < b.systemCompletionTime;
+        }
+        return a.totalSampleWaitingTime < b.totalSampleWaitingTime;
+    });
+
+    // In top 5 solutions
+    int numToPrint = min(5, static_cast<int>(paretoFront.size()));
     for (int i = 0; i < numToPrint; i++) {
         printSolution(paretoFront[i], i + 1);
     }

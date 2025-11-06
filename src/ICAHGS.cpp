@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <ctime>
 #include <iostream>
+#include <limits> // Thêm thư viện này để sử dụng giá trị lớn nhất/nhỏ nhất
 
 ICAHGS::ICAHGS(const Instance& inst, int popSize, int numEmp) 
     : instance(inst), decoder(inst), localSearch(inst),
@@ -32,8 +33,8 @@ std::vector<Solution> ICAHGS::run(int maxIterations) {
         }
         
         // Check convergence
-        if (empires.size() == 1) {
-            std::cout << "Converged: only one empire remains" << std::endl;
+        if (empires.size() <= 1) { // Sửa thành <= 1 cho an toàn
+            std::cout << "Converged: only one or zero empire remains" << std::endl;
             break;
         }
     }
@@ -89,16 +90,18 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
     for (int i = 0; i < numImperialists && i < populationSize; i++) {
         Empire empire;
         empire.imperialist = population[i];
-        empire.power = 0;
+        empire.power = 0; // Sẽ được tính lại ngay sau đây
         empires.push_back(empire);
     }
     
     // Distribute colonies
     int colonyIndex = numImperialists;
     while (colonyIndex < populationSize) {
-        // Distribute to empire with highest power (initially random)
-        int empireIdx = colonyIndex % numImperialists;
-        empires[empireIdx].colonies.push_back(population[colonyIndex]);
+        // Distribute to empire (round-robin)
+        int empireIdx = (colonyIndex - numImperialists) % numImperialists;
+        if (empireIdx < empires.size()) {
+            empires[empireIdx].colonies.push_back(population[colonyIndex]);
+        }
         colonyIndex++;
     }
     
@@ -148,82 +151,99 @@ void ICAHGS::assimilationAndRevolution() {
 void ICAHGS::imperialisticCompetition() {
     if (empires.size() <= 1) return;
     
-    // Find weakest empire
     int weakestIdx = selectWeakestEmpire();
     
     if (empires[weakestIdx].colonies.empty()) {
         // Empire has no colonies, collapse it
         // Move imperialist to strongest empire as colony
-        int strongestIdx = 0;
-        double maxPower = empires.power;
-        for (size_t i = 1; i < empires.size(); i++) {
-            if (empires[i].power > maxPower) {
+        
+        int strongestIdx = -1;
+        double maxPower = -1.0;
+
+        // ✅ Sửa logic tìm đế chế mạnh nhất
+        for (size_t i = 0; i < empires.size(); ++i) {
+            if (i == static_cast<size_t>(weakestIdx)) continue; // Bỏ qua đế chế yếu nhất
+            if (strongestIdx == -1 || empires[i].power > maxPower) {
                 maxPower = empires[i].power;
                 strongestIdx = i;
             }
         }
         
-        empires[strongestIdx].colonies.push_back(empires[weakestIdx].imperialist);
+        if (strongestIdx != -1) { // Đảm bảo tìm được đế chế mạnh nhất
+             empires[strongestIdx].colonies.push_back(empires[weakestIdx].imperialist);
+        }
+       
         empires.erase(empires.begin() + weakestIdx);
         
         std::cout << "  Empire collapsed. Remaining empires: " 
                   << empires.size() << std::endl;
     } else {
-        // Transfer weakest colony to strongest empire
+        // Transfer weakest colony to the winner of the competition
         int colonyIdx = selectRandomColony(empires[weakestIdx]);
         
-        int strongestIdx = 0;
-        double maxPower = empires.power;
-        for (size_t i = 1; i < empires.size(); i++) {
-            if (i != static_cast<size_t>(weakestIdx) && empires[i].power > maxPower) {
-                maxPower = empires[i].power;
-                strongestIdx = i;
+        // Logic to select the winner empire based on power (probability)
+        double totalPower = 0;
+        for (const auto& emp : empires) {
+            totalPower += emp.power;
+        }
+
+        std::uniform_real_distribution<double> dist(0.0, totalPower);
+        double pick = dist(rng);
+        
+        int winnerIdx = -1;
+        double currentPower = 0;
+        for (size_t i = 0; i < empires.size(); ++i) {
+            currentPower += empires[i].power;
+            if (pick <= currentPower) {
+                winnerIdx = i;
+                break;
             }
         }
-        
-        empires[strongestIdx].colonies.push_back(
-            empires[weakestIdx].colonies[colonyIdx]);
-        empires[weakestIdx].colonies.erase(
-            empires[weakestIdx].colonies.begin() + colonyIdx);
+
+        if (winnerIdx != -1 && winnerIdx != weakestIdx) {
+            empires[winnerIdx].colonies.push_back(
+                empires[weakestIdx].colonies[colonyIdx]);
+            empires[weakestIdx].colonies.erase(
+                empires[weakestIdx].colonies.begin() + colonyIdx);
+        }
     }
 }
 
 std::vector<int> ICAHGS::orderCrossover(const std::vector<int>& parent1,
-                                        const std::vector<int>& parent2) {
+                                         const std::vector<int>& parent2) {
     int n = parent1.size();
+    if (n < 2) {
+        return parent1;
+    }
     std::vector<int> offspring(n, -1);
     
-    // Select random segment from parent1
     std::uniform_int_distribution<int> dist(0, n - 1);
     int start = dist(rng);
     int end = dist(rng);
     
     if (start > end) std::swap(start, end);
     
+    // Use a boolean array for faster checking
+    std::vector<bool> in_offspring(n + 1, false);
+    
     // Copy segment from parent1
     for (int i = start; i <= end; i++) {
         offspring[i] = parent1[i];
+        in_offspring[parent1[i]] = true;
     }
     
     // Fill remaining positions from parent2
-    int pos = (end + 1) % n;
-    for (int i = 0; i < n; i++) {
-        int idx = (end + 1 + i) % n;
-        int gene = parent2[idx];
-        
-        // Check if gene already in offspring
-        bool found = false;
-        for (int j = start; j <= end; j++) {
-            if (offspring[j] == gene) {
-                found = true;
-                break;
-            }
+    int offspring_pos = (end + 1) % n;
+    int parent2_pos = (end + 1) % n;
+    
+    while (offspring_pos != start) {
+        int gene = parent2[parent2_pos];
+        if (!in_offspring[gene]) {
+            offspring[offspring_pos] = gene;
+            in_offspring[gene] = true; // FIX: Đánh dấu gene đã được thêm
+            offspring_pos = (offspring_pos + 1) % n;
         }
-        
-        if (!found) {
-            offspring[pos] = gene;
-            pos = (pos + 1) % n;
-        }
+        parent2_pos = (parent2_pos + 1) % n;
     }
     
     return offspring;
@@ -231,6 +251,9 @@ std::vector<int> ICAHGS::orderCrossover(const std::vector<int>& parent1,
 
 void ICAHGS::mutate(std::vector<int>& permutation, double mutationRate) {
     int n = permutation.size();
+    if (n < 2) {
+        return;
+    }
     std::uniform_real_distribution<double> prob(0.0, 1.0);
     std::uniform_int_distribution<int> pos(0, n - 1);
     
@@ -245,33 +268,27 @@ void ICAHGS::mutate(std::vector<int>& permutation, double mutationRate) {
 void ICAHGS::updateParetoArchive(const Solution& solution) {
     if (solution.systemCompletionTime >= INF) return;
     
-    // Check if dominated by any solution in archive
     bool isDominated = false;
-    std::vector<int> toRemove;
     
-    for (size_t i = 0; i < paretoArchive.size(); i++) {
-        if (paretoArchive[i].dominates(solution)) {
-            isDominated = true;
-            break;
-        }
-        if (solution.dominates(paretoArchive[i])) {
-            toRemove.push_back(i);
-        }
-    }
-    
+    // Remove solutions in the archive that are dominated by the new solution
+    paretoArchive.erase(std::remove_if(paretoArchive.begin(), paretoArchive.end(),
+        [&](const Solution& archiveSol) {
+            if (solution.dominates(archiveSol)) {
+                return true;
+            }
+            if (archiveSol.dominates(solution)) {
+                isDominated = true;
+            }
+            return false;
+        }),
+        paretoArchive.end());
+
     if (!isDominated) {
-        // Remove dominated solutions
-        for (int i = toRemove.size() - 1; i >= 0; i--) {
-            paretoArchive.erase(paretoArchive.begin() + toRemove[i]);
-        }
-        
-        // Add new solution
         paretoArchive.push_back(solution);
     }
 }
 
 double ICAHGS::calculateEmpirePower(const Empire& empire) {
-    // Power based on Pareto rank and crowding distance
     double impPower = 1.0 / (empire.imperialist.solution.paretoRank + 1.0);
     
     if (!empire.colonies.empty()) {
@@ -281,7 +298,6 @@ double ICAHGS::calculateEmpirePower(const Empire& empire) {
         }
         avgColonyPower /= empire.colonies.size();
         
-        // Total power with epsilon weighting for colonies
         impPower = impPower + 0.1 * avgColonyPower;
     }
     
@@ -296,8 +312,11 @@ int ICAHGS::selectRandomColony(Empire& empire) {
 }
 
 int ICAHGS::selectWeakestEmpire() {
+    if (empires.empty()) return -1;
+
     int weakestIdx = 0;
-    double minPower = empires.power;
+    // ✅ Sửa: Khởi tạo minPower với power của phần tử đầu tiên
+    double minPower = empires[0].power; 
     
     for (size_t i = 1; i < empires.size(); i++) {
         if (empires[i].power < minPower) {
@@ -307,8 +326,4 @@ int ICAHGS::selectWeakestEmpire() {
     }
     
     return weakestIdx;
-}
-
-bool ICAHGS::convergenceReached() {
-    return empires.size() == 1;
 }

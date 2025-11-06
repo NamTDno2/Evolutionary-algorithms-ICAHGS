@@ -175,10 +175,10 @@ Solution LocalSearch::applyMove(const Solution& solution, const Move& move) {
                     if (it != trip.customers.end()) {
                         trip.customers.erase(it);
                         found = true;
-                        break;
+                        break; // Dừng ngay khi tìm thấy và xóa
                     }
                 }
-                if (found) break;
+                if (found) break; // Dừng vòng lặp ngoài nếu đã tìm thấy
             }
         }
         
@@ -228,7 +228,7 @@ Solution LocalSearch::applyMove(const Solution& solution, const Move& move) {
 }
 
 bool LocalSearch::isTabu(int customer, int moveType) const {
-    return tabuList.find({customer, moveType}) != tabuList.end();
+    return tabuList.find(std::make_pair(customer, moveType)) != tabuList.end();
 }
 
 void LocalSearch::updateTabuList(int customer, int moveType) {

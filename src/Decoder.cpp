@@ -1,8 +1,10 @@
 #include "Decoder.h"
 #include <algorithm>
+#include <limits>
 
 Solution Decoder::decode(const std::vector<int>& permutation) {
     Solution solution;
+    std::vector<bool> servedCustomers(instance.getNumCustomers() + 1, false);
     
     // Initialize routes
     solution.truckRoutes.resize(instance.numTrucks);
@@ -10,6 +12,8 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
     
     // Process each customer in permutation order
     for (int custId : permutation) {
+        if (servedCustomers[custId]) continue; // Bỏ qua nếu đã phục vụ
+
         const Customer& cust = instance.customers[custId - 1];
         
         InsertionMove bestMove;
@@ -35,7 +39,7 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
             // Insert into drone route
             auto& droneTrips = solution.droneRoutes[bestMove.routeId];
             
-            if (bestMove.routeId >= droneTrips.size()) {
+            if (bestMove.position >= droneTrips.size()) { // Sửa logic: dùng position thay vì routeId
                 // Create new trip
                 Route newTrip;
                 newTrip.customers.push_back(custId);
@@ -45,6 +49,8 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
                 droneTrips[bestMove.position].customers.push_back(custId);
             }
         }
+        
+        servedCustomers[custId] = true; // Đánh dấu đã phục vụ
     }
     
     // Evaluate final solution
@@ -56,6 +62,7 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
 Decoder::InsertionMove Decoder::findBestTruckInsertion(int custId, 
                                                        Solution& solution) {
     InsertionMove bestMove;
+    bestMove.cost = std::numeric_limits<double>::max();
     bestMove.routeType = 0;
     
     for (int truckId = 0; truckId < instance.numTrucks; truckId++) {
@@ -88,6 +95,7 @@ Decoder::InsertionMove Decoder::findBestTruckInsertion(int custId,
 Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId, 
                                                        Solution& solution) {
     InsertionMove bestMove;
+    bestMove.cost = std::numeric_limits<double>::max();
     bestMove.routeType = 1;
     
     const Customer& cust = instance.customers[custId - 1];
