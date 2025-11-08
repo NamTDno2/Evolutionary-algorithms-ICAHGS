@@ -3,12 +3,23 @@
 #include <ctime>
 #include <iostream>
 #include <limits> // Thêm thư viện này để sử dụng giá trị lớn nhất/nhỏ nhất
+#include <unordered_set>  // ← THÊM
+#include <cstdint> 
 
 ICAHGS::ICAHGS(const Instance& inst, int popSize, int numEmp) 
     : instance(inst), decoder(inst), localSearch(inst),
       populationSize(popSize), numImperialists(numEmp) {
     
     rng.seed(static_cast<unsigned int>(time(nullptr)));
+    // **THÊM MỚI: Khởi tạo hasher**
+    hasher = new SolutionHasher(
+        instance.getNumCustomers(),
+        instance.numTrucks,
+        instance.numDrones
+    );
+}
+ICAHGS::~ICAHGS() {
+    delete hasher;
 }
 
 std::vector<Solution> ICAHGS::run(int maxIterations) {
@@ -45,11 +56,31 @@ std::vector<Solution> ICAHGS::run(int maxIterations) {
     return paretoArchive;
 }
 
+bool ICAHGS::isDuplicate(Solution& solution) {
+    // Tính hash cho solution
+    solution.solutionHash = hasher->computeHash(solution);
+    
+    // Kiểm tra hash đã tồn tại chưa
+    if (seenHashes.find(solution.solutionHash) != seenHashes.end()) {
+        return true;  // TRÙNG LẶP!
+    }
+    
+    // Chưa tồn tại, thêm vào
+    seenHashes.insert(solution.solutionHash);
+    return false;  // KHÔNG TRÙNG
+}
+
 void ICAHGS::initializePopulation() {
     std::vector<Individual> population;
+    int attempts = 0;
+    int maxAttemptsPerSolution = 100;  // Tối đa 100 attempts cho mỗi solution
     
-    // Generate random permutations
-    for (int i = 0; i < populationSize; i++) {
+    std::cout << "Initializing population with duplicate detection..." << std::endl;
+    
+    // Tạo đủ populationSize solutions
+    while (population.size() < (size_t)populationSize) {
+        attempts++;
+        
         Individual ind(instance.getNumCustomers());
         
         // Shuffle permutation
@@ -58,17 +89,65 @@ void ICAHGS::initializePopulation() {
         // Decode
         ind.solution = decoder.decode(ind.permutation);
         
-        // Update archive
-        updateParetoArchive(ind.solution);
+        // Kiểm tra duplicate
+        if (isDuplicate(ind.solution)) {
+            // Nếu đã thử quá nhiều lần, giảm yêu cầu
+            if (attempts > population.size() * maxAttemptsPerSolution) {
+                std::cout << "  Too many duplicates, accepting this one anyway..." << std::endl;
+                // Vẫn thêm vào để đủ số lượng
+                population.push_back(ind);
+                updateParetoArchive(ind.solution);
+            } else {
+                std::cout << "  Duplicate detected (attempt " << attempts << "), trying again..." << std::endl;
+                continue;
+            }
+        } else {
+            // Not duplicate, keep it
+            population.push_back(ind);
+            updateParetoArchive(ind.solution);
+        }
         
-        population.push_back(ind);
+        if (population.size() % 10 == 0) {
+            std::cout << "  Created " << population.size() << "/" << populationSize 
+                      << " unique solutions..." << std::endl;
+        }
+    }
+    
+    std::cout << "Population initialized: " << population.size() 
+              << " solutions (from " << attempts << " attempts)" << std::endl;
+    
+    if (attempts > population.size()) {
+        std::cout << "Duplicate rate: " 
+                  << (100.0 * (attempts - population.size()) / attempts) << "%" << std::endl;
+    }
+    
+    // Kiểm tra trước khi create empires
+    if (population.size() < (size_t)numImperialists) {
+        std::cerr << "ERROR: Not enough solutions (" << population.size() 
+                  << ") for " << numImperialists << " empires!" << std::endl;
+        std::cerr << "Reducing number of empires..." << std::endl;
+        numImperialists = std::max(1, (int)population.size() / 2);
     }
     
     // Create empires
     createEmpires(population);
 }
 
+
+
 void ICAHGS::createEmpires(std::vector<Individual>& population) {
+    // Safety check
+    if (population.empty()) {
+        std::cerr << "ERROR: Population is empty!" << std::endl;
+        return;
+    }
+    
+    if (population.size() < (size_t)numImperialists) {
+        std::cerr << "WARNING: Population size (" << population.size() 
+                  << ") < numImperialists (" << numImperialists << ")" << std::endl;
+        numImperialists = population.size();
+    }
+    
     // Non-dominated sorting
     std::vector<Solution*> solutions;
     for (auto& ind : population) {
@@ -76,7 +155,7 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
     }
     ParetoRanking::nonDominatedSorting(solutions);
     
-    // Sort population by Pareto rank and crowding distance
+    // Sort population
     std::sort(population.begin(), population.end(), 
               [](const Individual& a, const Individual& b) {
         if (a.solution.paretoRank != b.solution.paretoRank) {
@@ -85,23 +164,22 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
         return a.solution.crowdingDistance > b.solution.crowdingDistance;
     });
     
-    // Select imperialists (best individuals)
+    // Select imperialists
     empires.clear();
-    for (int i = 0; i < numImperialists && i < populationSize; i++) {
+    for (int i = 0; i < numImperialists; i++) {
         Empire empire;
         empire.imperialist = population[i];
-        empire.power = 0; // Sẽ được tính lại ngay sau đây
+        empire.power = 0;
         empires.push_back(empire);
     }
     
+    std::cout << "Created " << empires.size() << " empires" << std::endl;
+    
     // Distribute colonies
     int colonyIndex = numImperialists;
-    while (colonyIndex < populationSize) {
-        // Distribute to empire (round-robin)
+    while (colonyIndex < (int)population.size()) {
         int empireIdx = (colonyIndex - numImperialists) % numImperialists;
-        if (empireIdx < empires.size()) {
-            empires[empireIdx].colonies.push_back(population[colonyIndex]);
-        }
+        empires[empireIdx].colonies.push_back(population[colonyIndex]);
         colonyIndex++;
     }
     
@@ -109,7 +187,11 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
     for (auto& empire : empires) {
         empire.power = calculateEmpirePower(empire);
     }
+    
+    std::cout << "Distributed " << (population.size() - numImperialists) 
+              << " colonies among empires" << std::endl;
 }
+
 
 void ICAHGS::assimilationAndRevolution() {
     for (auto& empire : empires) {
@@ -125,6 +207,18 @@ void ICAHGS::assimilationAndRevolution() {
             // Decode
             Solution offspringSol = decoder.decode(offspring);
             
+            // **KIỂM TRA DUPLICATE**
+            if (isDuplicate(offspringSol)) {
+                // Nếu trùng, thử mutation mạnh hơn
+                mutate(offspring, 0.15);  // Mutation rate cao hơn
+                offspringSol = decoder.decode(offspring);
+                
+                // Check lại
+                if (isDuplicate(offspringSol)) {
+                    continue;  // Skip nếu vẫn trùng
+                }
+            }
+            
             // Local search
             offspringSol = localSearch.improve(offspringSol, 50);
             
@@ -132,11 +226,13 @@ void ICAHGS::assimilationAndRevolution() {
             updateParetoArchive(offspringSol);
             
             // Replace colony if better
-            if (offspringSol.dominates(empire.colonies[c].solution)) {
+            if (offspringSol.dominates(empire.colonies[c].solution) ||
+                (offspringSol.systemCompletionTime < INF && 
+                 empire.colonies[c].solution.systemCompletionTime >= INF)) {
                 empire.colonies[c].permutation = offspring;
                 empire.colonies[c].solution = offspringSol;
                 
-                // Check if colony becomes better than imperialist (Revolution)
+                // Revolution
                 if (offspringSol.dominates(empire.imperialist.solution)) {
                     std::swap(empire.imperialist, empire.colonies[c]);
                 }
@@ -147,6 +243,7 @@ void ICAHGS::assimilationAndRevolution() {
         empire.power = calculateEmpirePower(empire);
     }
 }
+
 
 void ICAHGS::imperialisticCompetition() {
     if (empires.size() <= 1) return;

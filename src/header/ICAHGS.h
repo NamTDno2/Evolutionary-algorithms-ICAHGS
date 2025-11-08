@@ -7,13 +7,15 @@
 #include "LocalSearch.h"
 #include <vector>
 #include <random>
+#include <unordered_set>  // ← THÊM DÒNG NÀY (cho unordered_set)
+#include <cstdint>
 
 class ICAHGS {
 public:
     ICAHGS(const Instance& inst, int popSize = 50, int numEmpires = 5);
-    
+    ~ICAHGS();  // ← THÊM DESTRUCTOR
     std::vector<Solution> run(int maxIterations = 100);
-    
+
 private:
     const Instance& instance;
     Decoder decoder;
@@ -26,9 +28,16 @@ private:
     
     std::mt19937 rng;
     
+    // **THÊM MỚI: Hash manager & duplicate tracker**
+    SolutionHasher* hasher;  // ← THÊM
+    std::unordered_set<uint64_t> seenHashes;  // ← THÊM
+
     // Initialization
     void initializePopulation();
     void createEmpires(std::vector<Individual>& population);
+
+    // **THÊM MỚI: Duplicate detection**
+    bool isDuplicate(Solution& solution);  // ← THÊM
     
     // ICA operations
     void assimilationAndRevolution();

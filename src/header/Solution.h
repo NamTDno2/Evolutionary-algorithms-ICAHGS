@@ -2,6 +2,10 @@
 #define SOLUTION_H
 
 #include "DataStructures.h"
+#include <map>         // ← THÊM (cho std::map)
+#include <tuple>       // ← THÊM (cho std::tuple)
+#include <random>      // ← THÊM (cho std::mt19937_64)
+#include <cstdint>
 
 class SolutionEvaluator {
 public:
@@ -33,6 +37,21 @@ class ParetoRanking {
 public:
     static void nonDominatedSorting(std::vector<Solution*>& solutions);
     static void calculateCrowdingDistance(std::vector<Solution*>& front);
+};
+
+// **THÊM MỚI: Zobrist Hashing để detect duplicates**
+class SolutionHasher {
+public:
+    SolutionHasher(int maxCustomers, int maxTrucks, int maxDrones);
+    
+    // Tính hash của solution
+    uint64_t computeHash(const Solution& solution) const;
+    
+private:
+    // Zobrist table: [customer_id][route_id][position] → random number
+    std::map<std::tuple<int, int, int>, uint64_t> zobristTable;
+    
+    void initializeZobristTable(int maxCustomers, int maxTrucks, int maxDrones);
 };
 
 #endif // SOLUTION_H
