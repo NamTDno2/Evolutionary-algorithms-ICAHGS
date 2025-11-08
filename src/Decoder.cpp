@@ -14,6 +14,9 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
     for (int custId : permutation) {
         if (servedCustomers[custId]) continue; // Bỏ qua nếu đã phục vụ
 
+        // Evaluate the current partial solution before finding the best insertion
+        evaluator.evaluate(solution);
+
         const Customer& cust = instance.customers[custId - 1];
         
         InsertionMove bestMove;

@@ -1,6 +1,7 @@
 #include "LocalSearch.h"
 #include <algorithm>
 #include <queue>
+#include <iostream> // Thêm để debug
 
 Solution LocalSearch::improve(const Solution& solution, int maxIterations) {
     Solution current = solution;
@@ -185,8 +186,13 @@ Solution LocalSearch::applyMove(const Solution& solution, const Move& move) {
         // Insert at new position
         if (move.toRoute < 1000) {
             // Insert into truck route
-            result.truckRoutes[move.toRoute].customers.insert(
-                result.truckRoutes[move.toRoute].customers.begin() + move.toPos,
+            auto& target_customers = result.truckRoutes[move.toRoute].customers;
+            size_t insert_pos = move.toPos;
+            if (insert_pos > target_customers.size()) {
+                insert_pos = target_customers.size();
+            }
+            target_customers.insert(
+                target_customers.begin() + insert_pos,
                 move.customer1);
         } else {
             // Insert into drone route (new trip)
@@ -197,30 +203,57 @@ Solution LocalSearch::applyMove(const Solution& solution, const Move& move) {
         }
         
     } else if (move.type == Move::SWAP) {
-        // Find and swap two customers
-        int* pos1 = nullptr;
-        int* pos2 = nullptr;
-        
-        // Find in truck routes
-        for (auto& route : result.truckRoutes) {
-            for (auto& cust : route.customers) {
-                if (cust == move.customer1) pos1 = &cust;
-                if (cust == move.customer2) pos2 = &cust;
-            }
-        }
-        
-        // Find in drone routes
-        for (auto& trips : result.droneRoutes) {
-            for (auto& trip : trips) {
-                for (auto& cust : trip.customers) {
-                    if (cust == move.customer1) pos1 = &cust;
-                    if (cust == move.customer2) pos2 = &cust;
+        // --- FIX: Sử dụng index thay vì con trỏ để tránh lỗi bộ nhớ ---
+        int route_type1 = -1, route_idx1 = -1, trip_idx1 = -1, cust_idx1 = -1;
+        int route_type2 = -1, route_idx2 = -1, trip_idx2 = -1, cust_idx2 = -1;
+
+        // Tìm vị trí của customer1
+        for (size_t i = 0; i < result.truckRoutes.size() && route_type1 == -1; ++i) {
+            for (size_t j = 0; j < result.truckRoutes[i].customers.size(); ++j) {
+                if (result.truckRoutes[i].customers[j] == move.customer1) {
+                    route_type1 = 0; route_idx1 = i; cust_idx1 = j; break;
                 }
             }
         }
-        
-        if (pos1 && pos2) {
-            std::swap(*pos1, *pos2);
+        if (route_type1 == -1) {
+            for (size_t i = 0; i < result.droneRoutes.size() && route_type1 == -1; ++i) {
+                for (size_t j = 0; j < result.droneRoutes[i].size(); ++j) {
+                    for (size_t k = 0; k < result.droneRoutes[i][j].customers.size(); ++k) {
+                        if (result.droneRoutes[i][j].customers[k] == move.customer1) {
+                            route_type1 = 1; route_idx1 = i; trip_idx1 = j; cust_idx1 = k; break;
+                        }
+                    }
+                    if (route_type1 != -1) break;
+                }
+            }
+        }
+
+        // Tìm vị trí của customer2
+        for (size_t i = 0; i < result.truckRoutes.size() && route_type2 == -1; ++i) {
+            for (size_t j = 0; j < result.truckRoutes[i].customers.size(); ++j) {
+                if (result.truckRoutes[i].customers[j] == move.customer2) {
+                    route_type2 = 0; route_idx2 = i; cust_idx2 = j; break;
+                }
+            }
+        }
+        if (route_type2 == -1) {
+            for (size_t i = 0; i < result.droneRoutes.size() && route_type2 == -1; ++i) {
+                for (size_t j = 0; j < result.droneRoutes[i].size(); ++j) {
+                    for (size_t k = 0; k < result.droneRoutes[i][j].customers.size(); ++k) {
+                        if (result.droneRoutes[i][j].customers[k] == move.customer2) {
+                            route_type2 = 1; route_idx2 = i; trip_idx2 = j; cust_idx2 = k; break;
+                        }
+                    }
+                    if (route_type2 != -1) break;
+                }
+            }
+        }
+
+        // Thực hiện hoán đổi nếu tìm thấy cả hai
+        if (route_type1 != -1 && route_type2 != -1) {
+            int& cust1_ref = (route_type1 == 0) ? result.truckRoutes[route_idx1].customers[cust_idx1] : result.droneRoutes[route_idx1][trip_idx1].customers[cust_idx1];
+            int& cust2_ref = (route_type2 == 0) ? result.truckRoutes[route_idx2].customers[cust_idx2] : result.droneRoutes[route_idx2][trip_idx2].customers[cust_idx2];
+            std::swap(cust1_ref, cust2_ref);
         }
     }
     

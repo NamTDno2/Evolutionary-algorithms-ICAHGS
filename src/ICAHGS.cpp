@@ -170,7 +170,7 @@ void ICAHGS::imperialisticCompetition() {
         }
         
         if (strongestIdx != -1) { // Đảm bảo tìm được đế chế mạnh nhất
-             empires[strongestIdx].colonies.push_back(empires[weakestIdx].imperialist);
+             empires[strongestIdx].colonies.push_back(std::move(empires[weakestIdx].imperialist));
         }
        
         empires.erase(empires.begin() + weakestIdx);
@@ -202,7 +202,7 @@ void ICAHGS::imperialisticCompetition() {
 
         if (winnerIdx != -1 && winnerIdx != weakestIdx) {
             empires[winnerIdx].colonies.push_back(
-                empires[weakestIdx].colonies[colonyIdx]);
+                std::move(empires[weakestIdx].colonies[colonyIdx]));
             empires[weakestIdx].colonies.erase(
                 empires[weakestIdx].colonies.begin() + colonyIdx);
         }

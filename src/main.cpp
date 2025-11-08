@@ -8,6 +8,8 @@
 #include <vector>
 #include <algorithm> // Cần cho hàm min
 #include <ctime>     // Cần cho hàm clock
+#include <set>       // Để lọc các giải pháp duy nhất
+#include <utility>   // Để sử dụng std::pair
 
 using namespace std;
 
@@ -59,14 +61,21 @@ void exportResults(const vector<Solution>& paretoFront,
     
     file << "SolutionID,CompletionTime,TotalWaitingTime" << endl;
     
-    for (size_t i = 0; i < paretoFront.size(); i++) {
-        file << i << "," 
-             << paretoFront[i].systemCompletionTime << ","
-             << paretoFront[i].totalSampleWaitingTime << endl;
+    set<pair<double, double>> exportedObjectives;
+    int solutionId = 0;
+    for (const auto& solution : paretoFront) {
+        pair<double, double> objectives = {solution.systemCompletionTime, solution.totalSampleWaitingTime};
+        
+        if (exportedObjectives.find(objectives) == exportedObjectives.end()) {
+            file << solutionId++ << "," 
+                 << solution.systemCompletionTime << ","
+                 << solution.totalSampleWaitingTime << endl;
+            exportedObjectives.insert(objectives);
+        }
     }
     
     file.close();
-    cout << "\nResults exported to: " << filename << endl;
+    cout << "\nUnique results exported to: " << filename << endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -117,10 +126,22 @@ int main(int argc, char* argv[]) {
         return a.totalSampleWaitingTime < b.totalSampleWaitingTime;
     });
 
-    // In top 5 solutions
-    int numToPrint = min(5, static_cast<int>(paretoFront.size()));
-    for (int i = 0; i < numToPrint; i++) {
-        printSolution(paretoFront[i], i + 1);
+    // In ra tối đa 5 giải pháp duy nhất
+    cout << "\n--- Top Unique Solutions ---" << endl;
+    set<pair<double, double>> printedObjectives;
+    int solutionsPrinted = 0;
+    for (const auto& solution : paretoFront) {
+        if (solutionsPrinted >= 5) {
+            break;
+        }
+        
+        pair<double, double> objectives = {solution.systemCompletionTime, solution.totalSampleWaitingTime};
+        
+        if (printedObjectives.find(objectives) == printedObjectives.end()) {
+            printSolution(solution, solutionsPrinted + 1);
+            printedObjectives.insert(objectives);
+            solutionsPrinted++;
+        }
     }
     
     // Export results
