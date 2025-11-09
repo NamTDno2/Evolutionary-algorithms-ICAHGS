@@ -2,6 +2,10 @@
 #include <algorithm>
 #include <cmath>
 #include <vector> // Thêm thư viện này
+#include <random>      // ← THÊM (cho mt19937_64)
+#include <tuple>       // ← THÊM (cho make_tuple)
+#include <map>         // ← THÊM (cho map)
+#include <cstdint>
 
 using namespace std;
 
@@ -324,4 +328,72 @@ void ParetoRanking::calculateCrowdingDistance(vector<Solution*>& front) {
             front[i]->crowdingDistance += (next - prev) / range;
         }
     }
+}
+// === SolutionHasher Implementation ===
+
+SolutionHasher::SolutionHasher(int maxCustomers, int maxTrucks, int maxDrones) {
+    initializeZobristTable(maxCustomers, maxTrucks, maxDrones);
+}
+
+void SolutionHasher::initializeZobristTable(int maxCustomers, int maxTrucks, int maxDrones) {
+    std::mt19937_64 rng(42);  // Seed cố định để reproducible
+    std::uniform_int_distribution<uint64_t> dist;
+    
+    int maxRoutes = maxTrucks + maxDrones * 10;  // Drone có nhiều trips
+    int maxPositions = maxCustomers;
+    
+    // Tạo số ngẫu nhiên cho mỗi (customer, route, position)
+    for (int customer = 1; customer <= maxCustomers; customer++) {
+        for (int route = 0; route < maxRoutes; route++) {
+            for (int position = 0; position < maxPositions; position++) {
+                auto key = std::make_tuple(customer, route, position);
+                zobristTable[key] = dist(rng);
+            }
+        }
+    }
+}
+
+uint64_t SolutionHasher::computeHash(const Solution& solution) const {
+    uint64_t hash = 0;
+    
+    // Hash truck routes
+    for (size_t truckId = 0; truckId < solution.truckRoutes.size(); truckId++) {
+        const Route& route = solution.truckRoutes[truckId];
+        
+        for (size_t pos = 0; pos < route.customers.size(); pos++) {
+            int customer = route.customers[pos];
+            int routeId = truckId;  // Route ID for trucks
+            
+            auto key = std::make_tuple(customer, routeId, (int)pos);
+            
+            // XOR với Zobrist value
+            if (zobristTable.find(key) != zobristTable.end()) {
+                hash ^= zobristTable.at(key);
+            }
+        }
+    }
+    
+    // Hash drone routes
+    for (size_t droneId = 0; droneId < solution.droneRoutes.size(); droneId++) {
+        const auto& trips = solution.droneRoutes[droneId];
+        
+        for (size_t tripId = 0; tripId < trips.size(); tripId++) {
+            const Route& trip = trips[tripId];
+            
+            // Route ID cho drone: offset sau truck routes
+            int routeId = solution.truckRoutes.size() + droneId * 10 + tripId;
+            
+            for (size_t pos = 0; pos < trip.customers.size(); pos++) {
+                int customer = trip.customers[pos];
+                
+                auto key = std::make_tuple(customer, routeId, (int)pos);
+                
+                if (zobristTable.find(key) != zobristTable.end()) {
+                    hash ^= zobristTable.at(key);
+                }
+            }
+        }
+    }
+    
+    return hash;
 }

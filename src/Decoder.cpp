@@ -62,51 +62,69 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
     return solution;
 }
 
-Decoder::InsertionMove Decoder::findBestTruckInsertion(int custId, 
-                                                       Solution& solution) {
+Decoder::InsertionMove Decoder::findBestTruckInsertion(int custId, Solution& solution) {
     InsertionMove bestMove;
-    bestMove.cost = std::numeric_limits<double>::max();
     bestMove.routeType = 0;
+    
+    // Lưu top-K moves tốt nhất
+    std::vector<InsertionMove> topMoves;
     
     for (int truckId = 0; truckId < instance.numTrucks; truckId++) {
         auto& route = solution.truckRoutes[truckId];
         
-        // Try all positions
         for (size_t pos = 0; pos <= route.customers.size(); pos++) {
-            // Create temporary solution
             Solution tempSolution = solution;
             tempSolution.truckRoutes[truckId].customers.insert(
                 tempSolution.truckRoutes[truckId].customers.begin() + pos, 
                 custId);
             
-            // Evaluate
             evaluator.evaluate(tempSolution);
             
-            double cost = evaluateInsertionCost(solution, tempSolution);
-            
-            if (cost < bestMove.cost) {
-                bestMove.cost = cost;
-                bestMove.routeId = truckId;
-                bestMove.position = pos;
+            if (tempSolution.systemCompletionTime < INF) {
+                double cost = evaluateInsertionCost(solution, tempSolution);
+                
+                InsertionMove move;
+                move.routeType = 0;
+                move.routeId = truckId;
+                move.position = pos;
+                move.cost = cost;
+                
+                topMoves.push_back(move);
             }
         }
     }
     
-    return bestMove;
+    if (topMoves.empty()) {
+        return bestMove;
+    }
+    
+    // Sort by cost
+    std::sort(topMoves.begin(), topMoves.end(), 
+              [](const InsertionMove& a, const InsertionMove& b) {
+        return a.cost < b.cost;
+    });
+    
+    // **THÊM RANDOMNESS: Chọn từ top-3 thay vì best**
+    int selectRange = std::min(3, (int)topMoves.size());
+    int selectedIdx = rand() % selectRange;
+    
+    return topMoves[selectedIdx];
 }
 
-Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId, 
-                                                       Solution& solution) {
+
+Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId, Solution& solution) {
     InsertionMove bestMove;
-    bestMove.cost = std::numeric_limits<double>::max();
     bestMove.routeType = 1;
     
     const Customer& cust = instance.customers[custId - 1];
     
+    // Lưu top-K moves tốt nhất
+    std::vector<InsertionMove> topMoves;
+    
     for (int droneId = 0; droneId < instance.numDrones; droneId++) {
         auto& trips = solution.droneRoutes[droneId];
         
-        // Try existing trips
+        // === Option 1: Thêm vào existing trip ===
         for (size_t tripId = 0; tripId < trips.size(); tripId++) {
             // Check capacity
             double currentLoad = 0;
@@ -115,7 +133,7 @@ Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId,
             }
             
             if (currentLoad + cust.demand > instance.droneParams.maxCapacity) {
-                continue;
+                continue;  // Skip nếu vượt capacity
             }
             
             // Try insertion
@@ -127,15 +145,17 @@ Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId,
             if (tempSolution.systemCompletionTime < INF) {
                 double cost = evaluateInsertionCost(solution, tempSolution);
                 
-                if (cost < bestMove.cost) {
-                    bestMove.cost = cost;
-                    bestMove.routeId = droneId;
-                    bestMove.position = tripId;
-                }
+                InsertionMove move;
+                move.routeType = 1;
+                move.routeId = droneId;
+                move.position = tripId;  // Existing trip
+                move.cost = cost;
+                
+                topMoves.push_back(move);
             }
         }
         
-        // Try new trip (direct flight)
+        // === Option 2: Create new trip (direct flight) ===
         Solution tempSolution = solution;
         Route newTrip;
         newTrip.customers.push_back(custId);
@@ -146,16 +166,33 @@ Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId,
         if (tempSolution.systemCompletionTime < INF) {
             double cost = evaluateInsertionCost(solution, tempSolution);
             
-            if (cost < bestMove.cost) {
-                bestMove.cost = cost;
-                bestMove.routeId = droneId;
-                bestMove.position = trips.size();  // New trip index
-            }
+            InsertionMove move;
+            move.routeType = 1;
+            move.routeId = droneId;
+            move.position = trips.size();  // New trip index
+            move.cost = cost;
+            
+            topMoves.push_back(move);
         }
     }
     
-    return bestMove;
+    if (topMoves.empty()) {
+        return bestMove;  // No feasible drone insertion
+    }
+    
+    // Sort by cost (ascending)
+    std::sort(topMoves.begin(), topMoves.end(), 
+              [](const InsertionMove& a, const InsertionMove& b) {
+        return a.cost < b.cost;
+    });
+    
+    // **THÊM RANDOMNESS: Chọn từ top-3 thay vì best**
+    int selectRange = std::min(3, (int)topMoves.size());
+    int selectedIdx = rand() % selectRange;
+    
+    return topMoves[selectedIdx];
 }
+
 
 double Decoder::evaluateInsertionCost(const Solution& before, 
                                      const Solution& after) {

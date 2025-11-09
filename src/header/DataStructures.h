@@ -125,6 +125,8 @@ struct Solution {
     int paretoRank;
     double crowdingDistance;
     
+    uint64_t solutionHash;
+    
     Solution() : systemCompletionTime(INF), totalSampleWaitingTime(INF),
                  paretoRank(0), crowdingDistance(0) {}
     

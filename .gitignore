@@ -1,11 +1,2 @@
 # Build output folder
 build/
-
-# VSCode editor-specific files
-.vscode/
-
-# Output files
-results.csv
-
-# Data files for testing
-data/
