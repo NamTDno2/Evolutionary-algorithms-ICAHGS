@@ -144,6 +144,7 @@ int main(int argc, char* argv[]) {
         }
     }
     
+
     // Export results
     exportResults(paretoFront, "results.csv");
     

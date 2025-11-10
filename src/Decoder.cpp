@@ -22,12 +22,10 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
         InsertionMove bestMove;
         
         if (cust.isStaffOnly) {
-            // Must use truck
-            bestMove = findBestTruckInsertion(custId, solution);
+            bestMove = findBestTruckInsertionIncremental(custId, solution);
         } else {
-            // Try both truck and drone
-            InsertionMove truckMove = findBestTruckInsertion(custId, solution);
-            InsertionMove droneMove = findBestDroneInsertion(custId, solution);
+            InsertionMove truckMove = findBestTruckInsertionIncremental(custId, solution);
+            InsertionMove droneMove = findBestDroneInsertionIncremental(custId, solution);
             
             bestMove = (truckMove.cost < droneMove.cost) ? truckMove : droneMove;
         }
@@ -62,69 +60,49 @@ Solution Decoder::decode(const std::vector<int>& permutation) {
     return solution;
 }
 
-Decoder::InsertionMove Decoder::findBestTruckInsertion(int custId, Solution& solution) {
+Decoder::InsertionMove Decoder::findBestTruckInsertionIncremental(
+    int custId, 
+    Solution& solution) {
+    
     InsertionMove bestMove;
     bestMove.routeType = 0;
+    bestMove.cost = INF;
     
-    // Lưu top-K moves tốt nhất
-    std::vector<InsertionMove> topMoves;
-    
+    // Thử tất cả trucks và positions
     for (int truckId = 0; truckId < instance.numTrucks; truckId++) {
         auto& route = solution.truckRoutes[truckId];
         
         for (size_t pos = 0; pos <= route.customers.size(); pos++) {
-            Solution tempSolution = solution;
-            tempSolution.truckRoutes[truckId].customers.insert(
-                tempSolution.truckRoutes[truckId].customers.begin() + pos, 
-                custId);
+            // ⭐ Tính delta cost thay vì evaluate toàn bộ
+            double deltaCost = computeTruckInsertionDelta(solution, custId, truckId, pos);
             
-            evaluator.evaluate(tempSolution);
-            
-            if (tempSolution.systemCompletionTime < INF) {
-                double cost = evaluateInsertionCost(solution, tempSolution);
-                
-                InsertionMove move;
-                move.routeType = 0;
-                move.routeId = truckId;
-                move.position = pos;
-                move.cost = cost;
-                
-                topMoves.push_back(move);
+            if (deltaCost < bestMove.cost) {
+                bestMove.cost = deltaCost;
+                bestMove.routeId = truckId;
+                bestMove.position = pos;
             }
         }
     }
     
-    if (topMoves.empty()) {
-        return bestMove;
-    }
-    
-    // Sort by cost
-    std::sort(topMoves.begin(), topMoves.end(), 
-              [](const InsertionMove& a, const InsertionMove& b) {
-        return a.cost < b.cost;
-    });
-    
-    // **THÊM RANDOMNESS: Chọn từ top-3 thay vì best**
-    int selectRange = std::min(3, (int)topMoves.size());
-    int selectedIdx = rand() % selectRange;
-    
-    return topMoves[selectedIdx];
+    return bestMove;
 }
 
 
-Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId, Solution& solution) {
+
+Decoder::InsertionMove Decoder::findBestDroneInsertionIncremental(
+    int custId,
+    Solution& solution) {
+    
     InsertionMove bestMove;
     bestMove.routeType = 1;
+    bestMove.cost = INF;
     
     const Customer& cust = instance.customers[custId - 1];
-    
-    // Lưu top-K moves tốt nhất
-    std::vector<InsertionMove> topMoves;
     
     for (int droneId = 0; droneId < instance.numDrones; droneId++) {
         auto& trips = solution.droneRoutes[droneId];
         
-        // === Option 1: Thêm vào existing trip ===
+        // ========== Option 1: Add to existing trip ==========
         for (size_t tripId = 0; tripId < trips.size(); tripId++) {
             // Check capacity
             double currentLoad = 0;
@@ -133,65 +111,36 @@ Decoder::InsertionMove Decoder::findBestDroneInsertion(int custId, Solution& sol
             }
             
             if (currentLoad + cust.demand > instance.droneParams.maxCapacity) {
-                continue;  // Skip nếu vượt capacity
+                continue;  // Skip
             }
             
-            // Try insertion
-            Solution tempSolution = solution;
-            tempSolution.droneRoutes[droneId][tripId].customers.push_back(custId);
+            // Tính delta cost
+            double deltaCost = computeDroneInsertionDelta(
+                solution, custId, droneId, tripId, false
+            );
             
-            evaluator.evaluate(tempSolution);
-            
-            if (tempSolution.systemCompletionTime < INF) {
-                double cost = evaluateInsertionCost(solution, tempSolution);
-                
-                InsertionMove move;
-                move.routeType = 1;
-                move.routeId = droneId;
-                move.position = tripId;  // Existing trip
-                move.cost = cost;
-                
-                topMoves.push_back(move);
+            if (deltaCost < bestMove.cost) {
+                bestMove.cost = deltaCost;
+                bestMove.routeId = droneId;
+                bestMove.position = tripId;
             }
         }
         
-        // === Option 2: Create new trip (direct flight) ===
-        Solution tempSolution = solution;
-        Route newTrip;
-        newTrip.customers.push_back(custId);
-        tempSolution.droneRoutes[droneId].push_back(newTrip);
+        // ========== Option 2: Create new trip ==========
+        double deltaCost = computeDroneInsertionDelta(
+            solution, custId, droneId, trips.size(), true
+        );
         
-        evaluator.evaluate(tempSolution);
-        
-        if (tempSolution.systemCompletionTime < INF) {
-            double cost = evaluateInsertionCost(solution, tempSolution);
-            
-            InsertionMove move;
-            move.routeType = 1;
-            move.routeId = droneId;
-            move.position = trips.size();  // New trip index
-            move.cost = cost;
-            
-            topMoves.push_back(move);
+        if (deltaCost < bestMove.cost) {
+            bestMove.cost = deltaCost;
+            bestMove.routeId = droneId;
+            bestMove.position = trips.size();
         }
     }
     
-    if (topMoves.empty()) {
-        return bestMove;  // No feasible drone insertion
-    }
-    
-    // Sort by cost (ascending)
-    std::sort(topMoves.begin(), topMoves.end(), 
-              [](const InsertionMove& a, const InsertionMove& b) {
-        return a.cost < b.cost;
-    });
-    
-    // **THÊM RANDOMNESS: Chọn từ top-3 thay vì best**
-    int selectRange = std::min(3, (int)topMoves.size());
-    int selectedIdx = rand() % selectRange;
-    
-    return topMoves[selectedIdx];
+    return bestMove;
 }
+
 
 
 double Decoder::evaluateInsertionCost(const Solution& before, 
@@ -206,3 +155,292 @@ double Decoder::evaluateInsertionCost(const Solution& before,
     
     return w1 * deltaCompletion + w2 * deltaWaiting;
 }
+
+// ==================== INCREMENTAL DECODER ====================
+
+Solution Decoder::decodeIncremental(const std::vector<int>& permutation) {
+    Solution solution;
+    solution.truckRoutes.resize(instance.numTrucks);
+    solution.droneRoutes.resize(instance.numDrones);
+    
+    // Initialize với objectives = 0
+    solution.systemCompletionTime = 0;
+    solution.totalSampleWaitingTime = 0;
+    
+    std::vector<bool> servedCustomers(instance.getNumCustomers() + 1, false);
+    
+    for (int custId : permutation) {
+        if (servedCustomers[custId]) continue;
+        
+        const Customer& cust = instance.customers[custId - 1];
+        
+        InsertionMove bestMove;
+        
+        if (cust.isStaffOnly) {
+            // Must use truck
+            bestMove = findBestTruckInsertionIncremental(custId, solution);
+        } else {
+            // Try both
+            InsertionMove truckMove = findBestTruckInsertionIncremental(custId, solution);
+            InsertionMove droneMove = findBestDroneInsertionIncremental(custId, solution);
+            
+            bestMove = (truckMove.cost < droneMove.cost) ? truckMove : droneMove;
+        }
+        
+        // Apply move
+        if (bestMove.routeType == 0) {
+            // Truck
+            solution.truckRoutes[bestMove.routeId].customers.insert(
+                solution.truckRoutes[bestMove.routeId].customers.begin() + bestMove.position,
+                custId
+            );
+        } else {
+            // Drone
+            if (bestMove.position < (int)solution.droneRoutes[bestMove.routeId].size()) {
+                // Existing trip
+                solution.droneRoutes[bestMove.routeId][bestMove.position].customers.push_back(custId);
+            } else {
+                // New trip
+                Route newTrip;
+                newTrip.customers.push_back(custId);
+                solution.droneRoutes[bestMove.routeId].push_back(newTrip);
+            }
+        }
+        
+        servedCustomers[custId] = true;
+    }
+    
+    // ⭐ Final evaluation một lần duy nhất
+    evaluator.evaluate(solution);
+    
+    return solution;
+}
+double Decoder::computeTruckInsertionDelta(
+    const Solution& current,
+    int custId,
+    int truckId,
+    int position) {
+    
+    const auto& route = current.truckRoutes[truckId];
+    const Customer& newCust = instance.customers[custId - 1];
+    
+    // ========== Tính OLD COST (trước khi thêm) ==========
+    double oldCompletionTime = 0;
+    double oldWaitingTime = 0;
+    
+    if (!route.customers.empty()) {
+        // Route đã có customers
+        double currentTime = 0;
+        
+        // Depot → First customer
+        double distance = instance.getDistance(0, route.customers[0]);
+        double travelTime = distance / instance.truckParams.maxSpeed;
+        currentTime += travelTime;
+        
+        // Service first customer
+        currentTime += instance.customers[route.customers[0] - 1].serviceTimeTruck;
+        
+        // Traverse route
+        for (size_t i = 1; i < route.customers.size(); i++) {
+            int prev = route.customers[i-1];
+            int curr = route.customers[i];
+            
+            distance = instance.getDistance(prev, curr);
+            travelTime = distance / instance.truckParams.maxSpeed;
+            currentTime += travelTime;
+            
+            // Service
+            currentTime += instance.customers[curr - 1].serviceTimeTruck;
+            
+            // Waiting time
+            oldWaitingTime += currentTime;
+        }
+        
+        // Return to depot
+        distance = instance.getDistance(route.customers.back(), 0);
+        travelTime = distance / instance.truckParams.maxSpeed;
+        currentTime += travelTime;
+        
+        oldCompletionTime = currentTime;
+    }
+    
+    // ========== Tính NEW COST (sau khi thêm) ==========
+    double newCompletionTime = 0;
+    double newWaitingTime = 0;
+    
+    // Tạo route tạm thời
+    std::vector<int> newRoute = route.customers;
+    newRoute.insert(newRoute.begin() + position, custId);
+    
+    double currentTime = 0;
+    
+    // Depot → First customer
+    double distance = instance.getDistance(0, newRoute[0]);
+    double travelTime = distance / instance.truckParams.maxSpeed;
+    currentTime += travelTime;
+    
+    // Service first
+    currentTime += instance.customers[newRoute[0] - 1].serviceTimeTruck;
+    
+    // Traverse
+    for (size_t i = 1; i < newRoute.size(); i++) {
+        int prev = newRoute[i-1];
+        int curr = newRoute[i];
+        
+        distance = instance.getDistance(prev, curr);
+        travelTime = distance / instance.truckParams.maxSpeed;
+        currentTime += travelTime;
+        
+        // Service
+        currentTime += instance.customers[curr - 1].serviceTimeTruck;
+        
+        // Waiting
+        newWaitingTime += currentTime;
+    }
+    
+    // Return
+    distance = instance.getDistance(newRoute.back(), 0);
+    travelTime = distance / instance.truckParams.maxSpeed;
+    currentTime += travelTime;
+    
+    newCompletionTime = currentTime;
+    
+    // ========== DELTA COST ==========
+    double deltaCT = newCompletionTime - oldCompletionTime;
+    double deltaWT = newWaitingTime - oldWaitingTime;
+    
+    // Weighted sum (có thể điều chỉnh weights)
+    double deltaCost = 0.5 * deltaCT + 0.5 * deltaWT;
+    
+    return deltaCost;
+}
+double Decoder::computeDroneInsertionDelta(
+    const Solution& current,
+    int custId,
+    int droneId,
+    int tripId,
+    bool newTrip) {
+    
+    const Customer& newCust = instance.customers[custId - 1];
+    
+    // ========== OLD COST ==========
+    double oldCompletionTime = 0;
+    double oldWaitingTime = 0;
+    
+    // ========== OLD COST ========== (Dòng ~285)
+if (!newTrip && tripId < (int)current.droneRoutes[droneId].size()) {
+    const auto& trip = current.droneRoutes[droneId][tripId];
+    
+    if (!trip.customers.empty()) {
+        double currentTime = 0;
+        double currentLoad = 0;
+        
+        // Depot → customers → Depot
+        for (size_t i = 0; i < trip.customers.size(); i++) {
+            int custId_old = trip.customers[i];
+            const Customer& c = instance.customers[custId_old - 1];
+            
+            currentLoad += c.demand;
+            
+            // Travel time
+            double distance = instance.getDistance(
+                (i == 0) ? 0 : trip.customers[i-1], 
+                custId_old
+            );
+            
+            // ✅ FIX: Dùng emptySpeed thay vì maxSpeed
+            double speed = instance.droneParams.cruiseSpeed;
+            currentTime += distance / speed;
+            
+            // Service
+            currentTime += c.serviceTimeDrone;
+            
+            // Waiting
+            oldWaitingTime += currentTime;
+        }
+        
+        // Return
+        double returnDist = instance.getDistance(trip.customers.back(), 0);
+        double speed = instance.droneParams.cruiseSpeed;
+        currentTime += returnDist / speed;
+        
+        oldCompletionTime = currentTime;
+    }
+}
+
+    
+    // ========== NEW COST ==========
+    double newCompletionTime = 0;
+    double newWaitingTime = 0;
+    
+    std::vector<int> newTripCustomers;
+    
+    if (newTrip) {
+        // New trip: chỉ có custId
+        newTripCustomers = {custId};
+    } else {
+        // Existing trip: thêm custId vào cuối
+        newTripCustomers = current.droneRoutes[droneId][tripId].customers;
+        newTripCustomers.push_back(custId);
+    }
+    
+    // ========== NEW COST ========== (Dòng ~325)
+double currentTime = 0;
+
+for (size_t i = 0; i < newTripCustomers.size(); i++) {
+    int cid = newTripCustomers[i];
+    const Customer& c = instance.customers[cid - 1];
+    
+    // Travel
+    double distance = instance.getDistance(
+        (i == 0) ? 0 : newTripCustomers[i-1],
+        cid
+    );
+    
+    // ✅ FIX: Dùng emptySpeed
+    double speed = instance.droneParams.cruiseSpeed;
+    currentTime += distance / speed;
+    
+    // Service
+    currentTime += c.serviceTimeDrone;
+    
+    // Waiting
+    newWaitingTime += currentTime;
+}
+
+// Return
+double returnDist = instance.getDistance(newTripCustomers.back(), 0);
+double speed = instance.droneParams.cruiseSpeed;
+currentTime += returnDist / speed;
+
+newCompletionTime = currentTime;
+
+    
+    // ========== Check Energy Constraint ==========
+    // Simple energy check (có thể refine)
+    double totalEnergy = 0;
+    double currentLoad = 0;
+    
+    for (int cid : newTripCustomers) {
+        currentLoad += instance.customers[cid - 1].demand;
+    }
+    
+    // Power = beta * load + gamma
+    double avgPower = instance.droneParams.beta * (currentLoad / 2) + 
+                     instance.droneParams.gamma;
+    totalEnergy = avgPower * newCompletionTime;
+    
+    if (totalEnergy > instance.droneParams.maxEnergy) {
+        return INF;  // Infeasible
+    }
+    
+    // ========== DELTA COST ==========
+    double deltaCT = newCompletionTime - oldCompletionTime;
+    double deltaWT = newWaitingTime - oldWaitingTime;
+    
+    double deltaCost = 0.5 * deltaCT + 0.5 * deltaWT;
+    
+    return deltaCost;
+}
+
+

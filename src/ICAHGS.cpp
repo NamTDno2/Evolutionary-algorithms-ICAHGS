@@ -87,7 +87,7 @@ void ICAHGS::initializePopulation() {
         std::shuffle(ind.permutation.begin(), ind.permutation.end(), rng);
         
         // Decode
-        ind.solution = decoder.decode(ind.permutation);
+        ind.solution = decoder.decodeIncremental(ind.permutation);
         
         // Kiểm tra duplicate
         if (isDuplicate(ind.solution)) {
@@ -136,61 +136,90 @@ void ICAHGS::initializePopulation() {
 
 
 void ICAHGS::createEmpires(std::vector<Individual>& population) {
-    // Safety check
     if (population.empty()) {
         std::cerr << "ERROR: Population is empty!" << std::endl;
         return;
     }
     
-    if (population.size() < (size_t)numImperialists) {
-        std::cerr << "WARNING: Population size (" << population.size() 
-                  << ") < numImperialists (" << numImperialists << ")" << std::endl;
-        numImperialists = population.size();
-    }
-    
-    // Non-dominated sorting
+    // ========== BƯỚC 1: Non-dominated Sorting ==========
     std::vector<Solution*> solutions;
     for (auto& ind : population) {
         solutions.push_back(&ind.solution);
     }
     ParetoRanking::nonDominatedSorting(solutions);
+    ParetoRanking::calculateCrowdingDistance(solutions);
     
-    // Sort population
-    std::sort(population.begin(), population.end(), 
-              [](const Individual& a, const Individual& b) {
-        if (a.solution.paretoRank != b.solution.paretoRank) {
-            return a.solution.paretoRank < b.solution.paretoRank;
+    // ========== BƯỚC 2: Group by Front ==========
+    std::map<int, std::vector<Individual>> fronts;
+    for (auto& ind : population) {
+        int rank = ind.solution.paretoRank;
+        fronts[rank].push_back(ind);
+    }
+    
+    std::cout << "Fronts structure:" << std::endl;
+    for (auto& [rank, front] : fronts) {
+        std::cout << "  Front " << rank << ": " << front.size() << " solutions" << std::endl;
+    }
+    
+    // ========== BƯỚC 3: Chọn Imperialists từ Fronts ==========
+    std::vector<Individual> imperialists;
+    
+    for (auto& [rank, front] : fronts) {
+        // Shuffle để random chọn
+        std::shuffle(front.begin(), front.end(), rng);
+        
+        std::cout << "Selecting from Front " << rank << "..." << std::endl;
+        
+        for (auto& ind : front) {
+            imperialists.push_back(ind);
+            std::cout << "  Selected imperialist #" << imperialists.size() 
+                      << " (rank=" << ind.solution.paretoRank 
+                      << ", CT=" << ind.solution.systemCompletionTime 
+                      << ")" << std::endl;
+            
+            if (imperialists.size() >= (size_t)numImperialists) {
+                break;
+            }
         }
-        return a.solution.crowdingDistance > b.solution.crowdingDistance;
-    });
+        
+        if (imperialists.size() >= (size_t)numImperialists) {
+            break;
+        }
+    }
     
-    // Select imperialists
+    if (imperialists.size() < (size_t)numImperialists) {
+        std::cerr << "WARNING: Only found " << imperialists.size() 
+                  << " imperialists, need " << numImperialists << std::endl;
+    }
+    
+    // ========== BƯỚC 4: Tạo Empires ==========
     empires.clear();
-    for (int i = 0; i < numImperialists; i++) {
+    for (auto& imp : imperialists) {
         Empire empire;
-        empire.imperialist = population[i];
+        empire.imperialist = imp;
         empire.power = 0;
         empires.push_back(empire);
     }
     
     std::cout << "Created " << empires.size() << " empires" << std::endl;
     
-    // Distribute colonies
-    int colonyIndex = numImperialists;
-    while (colonyIndex < (int)population.size()) {
-        int empireIdx = (colonyIndex - numImperialists) % numImperialists;
-        empires[empireIdx].colonies.push_back(population[colonyIndex]);
+    // ========== BƯỚC 5: Phân Colonies ==========
+    int colonyIndex = 0;
+    for (size_t i = numImperialists; i < population.size(); i++) {
+        int empireIdx = colonyIndex % empires.size();
+        empires[empireIdx].colonies.push_back(population[i]);
         colonyIndex++;
     }
     
-    // Calculate initial powers
+    // Tính initial power
     for (auto& empire : empires) {
         empire.power = calculateEmpirePower(empire);
     }
     
     std::cout << "Distributed " << (population.size() - numImperialists) 
-              << " colonies among empires" << std::endl;
+              << " colonies among " << empires.size() << " empires" << std::endl;
 }
+
 
 
 void ICAHGS::assimilationAndRevolution() {

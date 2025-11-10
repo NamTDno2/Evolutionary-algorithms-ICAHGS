@@ -1,2 +1,4 @@
-# Build output folder
 build/
+.vscode/
+data/
+results.csv

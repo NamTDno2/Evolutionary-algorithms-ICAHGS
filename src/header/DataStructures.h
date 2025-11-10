@@ -5,7 +5,7 @@
 #include <string>
 #include <limits>
 #include <cmath> 
-
+#include <cstdint>
 using namespace std;
 
 // Constants
