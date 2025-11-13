@@ -73,7 +73,7 @@ void SolutionEvaluator::evaluateTruckRoute(Route& route, int truckId) {
     route.completionTime = currentTime;
     
     // Calculate waiting time
-    double returnTime = currentTime;
+    double returnTime = currentTime;    // Lưu thời gian quay về depot
     currentTime = 0;
     prevNode = 0;
     
@@ -155,12 +155,13 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     return true;
 }
 
+// TÍNH THỜI GIAN DI CHUYỂN CÓ PHỤ THUỘC VÀO THỜI ĐIỂM
 double SolutionEvaluator::calculateTruckTravelTime(double startTime, double distance) {
     double time = 0;
     double remainingDist = distance;
     double currentTime = startTime;
     
-    while (remainingDist > 1e-6) {
+    while (remainingDist > 1e-6) {  // Khi còn quãng đường
         double sigma = getSpeedFactor(currentTime);
         double speed = instance.truckParams.maxSpeed * sigma;
         
@@ -172,13 +173,16 @@ double SolutionEvaluator::calculateTruckTravelTime(double startTime, double dist
             }
         }
         
+        // Tính quãng đường có thể đi trong interval này
         double timeToIntervalEnd = intervalEnd - currentTime;
         double distInInterval = speed * timeToIntervalEnd;
         
+        // Nếu quãng đường còn lại có thể đi hết trong interval → xong
         if (distInInterval >= remainingDist) {
             time += remainingDist / speed;
             break;
         } else {
+            // Nếu chưa hết → di chuyển hết interval này, chuyển sang interval tiếp
             time += timeToIntervalEnd;
             remainingDist -= distInInterval;
             currentTime = intervalEnd;
@@ -189,6 +193,10 @@ double SolutionEvaluator::calculateTruckTravelTime(double startTime, double dist
 }
 
 double SolutionEvaluator::calculateDroneEnergy(const Route& route) {
+    
+    // TÍNH NĂNG LƯỢNG TIÊU THỤ CỦA DRONE
+    // Energy = (β * Load + γ) * flightTime
+
     if (route.isEmpty()) return 0;
     
     double totalEnergy = 0;
@@ -208,24 +216,28 @@ double SolutionEvaluator::calculateDroneEnergy(const Route& route) {
         double energy = power * travelTime;
         totalEnergy += energy;
         
+        // Sau khi lấy mẫu, tải trọng giảm
         currentLoad -= instance.customers[custId - 1].demand;
         prevNode = custId;
     }
     
+    // Quay về depot (không có tải)
     double distance = instance.getDistance(prevNode, 0);
     double travelTime = distance / instance.droneParams.cruiseSpeed;
     double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
     totalEnergy += power * travelTime;
     
-    return totalEnergy / 1000.0;
+    return totalEnergy / 1000.0;    // Chuyển sang kJ
 }
 
+// TÌM HỆ SỐ TỐCĐỘ TẠI THỜI ĐIỂM time
 double SolutionEvaluator::getSpeedFactor(double time) const {
     for (const auto& interval : instance.truckParams.timeIntervals) {
         if (time >= interval.startTime && time < interval.endTime) {
             return interval.sigma;
         }
     }
+    // Nếu không tìm thấy (vượt quá cuối ngày) → lấy σ của interval cuối cùng
     if (!instance.truckParams.timeIntervals.empty()) {
         return instance.truckParams.timeIntervals.back().sigma;
     }
@@ -237,24 +249,25 @@ double SolutionEvaluator::getSpeedFactor(double time) const {
 
 void ParetoRanking::nonDominatedSorting(vector<Solution*>& solutions) {
     int n = solutions.size();
-    vector<int> dominationCount(n, 0);
-    vector<vector<int>> dominatedSolutions(n);
-    vector<vector<int>> fronts;
+    vector<int> dominationCount(n, 0);  // Đếm số solution dominate solution i
+    vector<vector<int>> dominatedSolutions(n);  // Danh sách solutions bị i dominate
+    vector<vector<int>> fronts; // Lưu các fronts
     
     vector<int> currentFront;
     
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
-            if (solutions[i]->dominates(*solutions[j])) {
+            if (solutions[i]->dominates(*solutions[j])) {   // i dominate j
                 dominatedSolutions[i].push_back(j);
                 dominationCount[j]++;
-            } else if (solutions[j]->dominates(*solutions[i])) {
+            } else if (solutions[j]->dominates(*solutions[i])) {    // j dominate i
                 dominatedSolutions[j].push_back(i);
                 dominationCount[i]++;
             }
         }
         
-        if (dominationCount[i] == 0) {
+        // TÌM FRONT 1
+        if (dominationCount[i] == 0) {  
             currentFront.push_back(i);
             solutions[i]->paretoRank = 1;
         }
@@ -262,13 +275,14 @@ void ParetoRanking::nonDominatedSorting(vector<Solution*>& solutions) {
     
     fronts.push_back(currentFront);
     
+    //  TÌM FRONT 2, 3, ...
     int rank = 1;
     while (!currentFront.empty()) {
         vector<int> nextFront;
         for (int i : currentFront) {
             for (int j : dominatedSolutions[i]) {
                 dominationCount[j]--;
-                if (dominationCount[j] == 0) {
+                if (dominationCount[j] == 0) {  //  Nếu j không còn ai dominate
                     nextFront.push_back(j);
                     solutions[j]->paretoRank = rank + 1;
                 }

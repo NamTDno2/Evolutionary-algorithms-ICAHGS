@@ -28,7 +28,7 @@ struct Customer {
 struct TimeInterval {
     double startTime;  // Ta
     double endTime;    // Ta+1
-    double sigma;      // Speed factor
+    double sigma;      // hệ số tỏng khoảng thời gian đó
     
     TimeInterval() : startTime(0), endTime(0), sigma(1.0) {}
     TimeInterval(double s, double e, double sig) 
@@ -39,12 +39,12 @@ struct TimeInterval {
 struct DroneParams {
     double maxCapacity;     // Md (kg)
     double maxEnergy;       // E (kJ)
-    double takeoffSpeed;    // m/s
-    double cruiseSpeed;     // m/s
-    double landingSpeed;    // m/s
-    double beta;            // W/kg - energy per unit mass
-    double gamma;           // W - base energy consumption
-    double maxFlightTime;   // seconds
+    double takeoffSpeed;    // m/s cất cánh
+    double cruiseSpeed;     // m/s bay
+    double landingSpeed;    // m/s hạ cánh
+    double beta;            // W/kg hệ số năng lượng theo tải
+    double gamma;           // W - tiêu hao năng lượng nền
+    double maxFlightTime;   // thời gian bay tối đa
     
     DroneParams() : maxCapacity(0), maxEnergy(0), takeoffSpeed(0), 
                     cruiseSpeed(0), landingSpeed(0), beta(0), gamma(0),
@@ -54,7 +54,7 @@ struct DroneParams {
 // Truck parameters
 struct TruckParams {
     double maxSpeed;  // Vmax (m/s)
-    std::vector<TimeInterval> timeIntervals;  // Speed schedule
+    vector<TimeInterval> timeIntervals;  // danh sách các khoảng thời gian, tắc đường
     
     TruckParams() : maxSpeed(0) {}
 };
@@ -63,7 +63,7 @@ struct TruckParams {
 struct Instance {
     int numTrucks;
     int numDrones;
-    std::vector<Customer> customers;
+    vector<Customer> customers;
     DroneParams droneParams;
     TruckParams truckParams;
     
@@ -96,7 +96,7 @@ struct Instance {
 
 // Route structure
 struct Route {
-    std::vector<int> customers;  // Customer IDs (0 = depot)
+    vector<int> customers;  // Customer IDs 
     double completionTime;
     double totalWaitingTime;
     
@@ -114,11 +114,11 @@ struct Route {
 
 // Solution structure
 struct Solution {
-    std::vector<Route> truckRoutes;
-    std::vector<std::vector<Route>> droneRoutes; // Multiple trips per drone
+    vector<Route> truckRoutes;
+    vector<vector<Route>> droneRoutes; // Multiple trips per drone
     
     // Objectives
-    double systemCompletionTime;  // Max completion time
+    double systemCompletionTime;  // thời gian hoàn thành lấy mẫu cuối cùng
     double totalSampleWaitingTime; // Sum of all waiting times
     
     // Pareto ranking
@@ -130,7 +130,7 @@ struct Solution {
     Solution() : systemCompletionTime(INF), totalSampleWaitingTime(INF),
                  paretoRank(0), crowdingDistance(0) {}
     
-    // Pareto dominance check
+    // kiểm tra xem có dominate với lời giải khác không
     bool dominates(const Solution& other) const {
         bool better = false;
         
@@ -157,8 +157,8 @@ struct Solution {
 
 // Individual in population (Empire or Colony)
 struct Individual {
-    std::vector<int> permutation;  // Customer permutation
-    Solution solution;             // Decoded solution
+    vector<int> permutation;  // bộ gen hoán vị
+    Solution solution;             // lời giải sau khi decoded từ hoán vị
     
     Individual() {}
     Individual(int n) : permutation(n) {
@@ -171,7 +171,7 @@ struct Individual {
 // Empire structure
 struct Empire {
     Individual imperialist;
-    std::vector<Individual> colonies;
+    vector<Individual> colonies;
     double power;
     
     Empire() : power(0) {}
