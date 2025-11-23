@@ -3,6 +3,7 @@
 
 #include "DataStructures.h"
 #include "Solution.h"
+#include "Chromosome.h"
 
 class Decoder {
 public:
@@ -11,6 +12,8 @@ public:
     Solution decode(const std::vector<int>& permutation);
     //  NEW: Incremental decoder
     Solution decodeIncremental(const std::vector<int>& permutation);
+    //  NEW: Decode from Chromosome
+    Solution decode(const Chromosome& chrom, const Instance& inst);
     
 private:
     const Instance& instance;

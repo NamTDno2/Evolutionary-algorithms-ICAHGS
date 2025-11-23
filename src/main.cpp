@@ -1,6 +1,7 @@
 #include "DataStructures.h"
 #include "InputReader.h"
 #include "ICAHGS.h"
+#include "Chromosome.h"
 #include <iostream>
 #include <iomanip>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <ctime>     // Cần cho hàm clock
 #include <set>       // Để lọc các giải pháp duy nhất
 #include <utility>   // Để sử dụng std::pair
+#include <random>
 
 using namespace std;
 
@@ -19,6 +21,8 @@ void printSolution(const Solution& solution, int index) {
          << solution.systemCompletionTime << " seconds" << endl;
     cout << "Total Sample Waiting Time: " << solution.totalSampleWaitingTime 
          << " seconds" << endl;
+
+    solution.chrom.printGenotype();
     
     cout << "\nTruck Routes:" << endl;
     for (size_t i = 0; i < solution.truckRoutes.size(); i++) {
@@ -81,7 +85,7 @@ void exportResults(const vector<Solution>& paretoFront,
 int main(int argc, char* argv[]) {
     cout << "=== ICAHGS for MSSVTDE ===" << endl;
     
-    string filename = "data/6.5.1.txt";
+    string filename = "../data/10.5.1.txt";
     if (argc > 1) {
         filename = argv[1];
     }

@@ -5,6 +5,7 @@
 #include <limits> // Thêm thư viện này để sử dụng giá trị lớn nhất/nhỏ nhất
 #include <unordered_set>  // ← THÊM
 #include <cstdint> 
+#include <random>
 
 ICAHGS::ICAHGS(const Instance& inst, int popSize, int numEmp) 
     : instance(inst), decoder(inst), localSearch(inst),
@@ -12,14 +13,15 @@ ICAHGS::ICAHGS(const Instance& inst, int popSize, int numEmp)
     
     rng.seed(static_cast<unsigned int>(time(nullptr)));
     // **THÊM MỚI: Khởi tạo hasher**
-    hasher = new SolutionHasher(
-        instance.getNumCustomers(),
-        instance.numTrucks,
-        instance.numDrones
-    );
+    // hasher = new SolutionHasher(
+    //     instance.getNumCustomers(),
+    //     instance.numTrucks,
+    //     instance.numDrones
+    // );
+    
 }
 ICAHGS::~ICAHGS() {
-    delete hasher;
+    // delete hasher;
 }
 
 std::vector<Solution> ICAHGS::run(int maxIterations) {
@@ -55,7 +57,7 @@ std::vector<Solution> ICAHGS::run(int maxIterations) {
     
     return paretoArchive;
 }
-
+// TODO: Fix duplicate detection for new Chromosome-based solution
 bool ICAHGS::isDuplicate(Solution& solution) {
     // Tính hash cho solution
     solution.solutionHash = hasher->computeHash(solution);
@@ -81,31 +83,43 @@ void ICAHGS::initializePopulation() {
     while (population.size() < (size_t)populationSize) {
         attempts++;
         
-        Individual ind(instance.getNumCustomers());
+        Chromosome chrom(instance.customers, 
+                          instance.numTrucks, 
+                          instance.numDrones, 
+                          rng);
+
+        Individual ind(chrom);
+
+        // Individual ind(instance.getNumCustomers());
         
-        // Shuffle permutation
-        std::shuffle(ind.permutation.begin(), ind.permutation.end(), rng);
+        // // Shuffle permutation
+        // std::shuffle(ind.permutation.begin(), ind.permutation.end(), rng);
         
         // Decode
-        ind.solution = decoder.decodeIncremental(ind.permutation);
+        // ind.solution = decoder.decodeIncremental(ind.permutation);
+        ind.solution = decoder.decode(chrom, instance);
         
-        // Kiểm tra duplicate
-        if (isDuplicate(ind.solution)) {
-            // Nếu đã thử quá nhiều lần, giảm yêu cầu
-            if (attempts > population.size() * maxAttemptsPerSolution) {
-                std::cout << "  Too many duplicates, accepting this one anyway..." << std::endl;
-                // Vẫn thêm vào để đủ số lượng
-                population.push_back(ind);
-                updateParetoArchive(ind.solution);
-            } else {
-                std::cout << "  Duplicate detected (attempt " << attempts << "), trying again..." << std::endl;
-                continue;
-            }
-        } else {
-            // Not duplicate, keep it
-            population.push_back(ind);
-            updateParetoArchive(ind.solution);
-        }
+        // TODO: Kiểm tra duplicate
+        // if (isDuplicate(ind.solution)) {
+        //     // Nếu đã thử quá nhiều lần, giảm yêu cầu
+        //     if (attempts > population.size() * maxAttemptsPerSolution) {
+        //         std::cout << "  Too many duplicates, accepting this one anyway..." << std::endl;
+        //         // Vẫn thêm vào để đủ số lượng
+        //         population.push_back(ind);
+        //         updateParetoArchive(ind.solution);
+        //     } else {
+        //         std::cout << "  Duplicate detected (attempt " << attempts << "), trying again..." << std::endl;
+        //         continue;
+        //     }
+        // } else {
+        //     // Not duplicate, keep it
+        //     population.push_back(ind);
+        //     updateParetoArchive(ind.solution);
+        // }
+
+        // Add to population
+        population.push_back(ind);
+        updateParetoArchive(ind.solution);
         
         if (population.size() % 10 == 0) {
             std::cout << "  Created " << population.size() << "/" << populationSize 
@@ -226,30 +240,31 @@ void ICAHGS::assimilationAndRevolution() {
     for (auto& empire : empires) {
         for (size_t c = 0; c < empire.colonies.size(); c++) {
             // Crossover (Assimilation)
-            std::vector<int> offspring = orderCrossover(
-                empire.imperialist.permutation,
-                empire.colonies[c].permutation);
+            Chromosome offspring = Chromosome::crossover(
+                empire.imperialist.chrom,
+                empire.colonies[c].chrom, rng);
             
             // Mutation (Revolution)
-            mutate(offspring, 0.05);
+            // mutate(offspring, 0.05);
+            offspring.mutate(0.05, rng);
             
             // Decode
-            Solution offspringSol = decoder.decode(offspring);
+            Solution offspringSol = decoder.decode(offspring, instance);
             
-            // **KIỂM TRA DUPLICATE**
-            if (isDuplicate(offspringSol)) {
-                // Nếu trùng, thử mutation mạnh hơn
-                mutate(offspring, 0.15);  // Mutation rate cao hơn
-                offspringSol = decoder.decode(offspring);
+            // **TODO: KIỂM TRA DUPLICATE**
+            // if (isDuplicate(offspringSol)) {
+            //     // Nếu trùng, thử mutation mạnh hơn
+            //     mutate(offspring, 0.15);  // Mutation rate cao hơn
+            //     offspringSol = decoder.decode(offspring);
                 
-                // Check lại
-                if (isDuplicate(offspringSol)) {
-                    continue;  // Skip nếu vẫn trùng
-                }
-            }
+            //     // Check lại
+            //     if (isDuplicate(offspringSol)) {
+            //         continue;  // Skip nếu vẫn trùng
+            //     }
+            // }
             
-            // Local search
-            offspringSol = localSearch.improve(offspringSol, 50);
+            // Local search (CULPRIT)
+            // offspringSol = localSearch.improve(offspringSol, 50);
             
             // Update archive
             updateParetoArchive(offspringSol);
@@ -258,7 +273,7 @@ void ICAHGS::assimilationAndRevolution() {
             if (offspringSol.dominates(empire.colonies[c].solution) ||
                 (offspringSol.systemCompletionTime < INF && 
                  empire.colonies[c].solution.systemCompletionTime >= INF)) {
-                empire.colonies[c].permutation = offspring;
+                empire.colonies[c].chrom = offspring;
                 empire.colonies[c].solution = offspringSol;
                 
                 // Revolution

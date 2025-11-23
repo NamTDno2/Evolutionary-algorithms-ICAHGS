@@ -6,6 +6,7 @@
 #include <limits>
 #include <cmath> 
 #include <cstdint>
+#include "Chromosome.h"
 using namespace std;
 
 // Constants
@@ -114,6 +115,7 @@ struct Route {
 
 // Solution structure
 struct Solution {
+    Chromosome chrom; // Chromosome representation
     vector<Route> truckRoutes;
     vector<vector<Route>> droneRoutes; // Multiple trips per drone
     
@@ -157,15 +159,12 @@ struct Solution {
 
 // Individual in population (Empire or Colony)
 struct Individual {
-    vector<int> permutation;  // bộ gen hoán vị
+    // vector<int> permutation;  // bộ gen hoán vị
+    Chromosome chrom;      // Chromosome representation
     Solution solution;             // lời giải sau khi decoded từ hoán vị
     
     Individual() {}
-    Individual(int n) : permutation(n) {
-        for (int i = 0; i < n; i++) {
-            permutation[i] = i + 1;  // Customer IDs start from 1
-        }
-    }
+    Individual(Chromosome c) : chrom(c) {}
 };
 
 // Empire structure
