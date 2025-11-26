@@ -4,8 +4,73 @@
 #include <sstream>
 #include <iostream>
 #include <cctype>
+#include "../include/json.hpp"
 
 using namespace std;
+using json = nlohmann::json;
+
+DroneParams readDroneParams(int index)
+{
+    DroneParams droneParams;
+    std::ifstream file("../config/drone_linear_config.json");
+    if (!file.is_open())
+    {
+        std::cerr << "Không thể mở file JSON!\n";
+        return droneParams;
+    }
+
+    json data;
+    file >> data;
+
+    if (data.contains(std::to_string(index)))
+    {
+        auto item = data[std::to_string(index)];
+        droneParams.takeoffSpeed = item["takeoffSpeed [m/s]"].get<double>();
+        droneParams.cruiseSpeed = item["cruiseSpeed [m/s]"].get<double>();
+        droneParams.landingSpeed = item["landingSpeed [m/s]"].get<double>();
+        droneParams.maxCapacity = item["capacity [kg]"].get<double>();
+        droneParams.maxEnergy = item["batteryPower [Joule]"].get<double>();
+        droneParams.beta = item["beta(w/kg)"].get<double>();
+        droneParams.gamma = item["gama(w)"].get<double>();
+    }
+
+    return droneParams;
+}
+
+TruckParams readTruckParams() {
+    TruckParams truckParams;
+    std::ifstream file("../config/Truck_config.json");
+    if (!file.is_open())
+    {
+        std::cerr << "Không thể mở file JSON!\n";
+        return truckParams;
+    }
+
+    json data;
+    file >> data;
+
+    truckParams.maxSpeed = data["V_max (m/s)"].get<double>();
+
+    auto hours = data["T (hour)"];
+    for (auto& [key, value] : hours.items()) {
+        int startHour = 0, endHour = 0;
+
+        size_t pos = key.find('-');
+        if (pos != std::string::npos) {
+            startHour = std::stoi(key.substr(0, pos));
+            endHour = std::stoi(key.substr(pos + 1));
+        }
+
+        int startSec = startHour * 3600;
+        int endSec   = endHour * 3600;
+
+        double factor = value.get<double>();
+
+        truckParams.timeIntervals.emplace_back(startSec, endSec, factor);
+    }
+
+    return truckParams;
+}
 
 bool InputReader::readInstance(const string& filename, Instance& instance) {
     ifstream file(filename);
@@ -82,20 +147,11 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
     
     file.close();
     
-    // Set default parameters
-    instance.droneParams.maxCapacity = 5.0;
-    instance.droneParams.maxEnergy = 500.0;
-    instance.droneParams.takeoffSpeed = 5.0;
-    instance.droneParams.cruiseSpeed = 15.0;
-    instance.droneParams.landingSpeed = 5.0;
-    instance.droneParams.gamma = 100.0;
+    double tempMaxFlight = instance.droneParams.maxFlightTime;
+    instance.droneParams = readDroneParams(2); // changable config (ENUM: 1, 2, 3, 4)
+    instance.droneParams.maxFlightTime = tempMaxFlight;
     
-    instance.truckParams.maxSpeed = 20.0;
-    
-    // Create simple time intervals
-    instance.truckParams.timeIntervals.push_back(TimeInterval(0, 3600, 0.8));
-    instance.truckParams.timeIntervals.push_back(TimeInterval(3600, 7200, 1.0));
-    instance.truckParams.timeIntervals.push_back(TimeInterval(7200, 14400, 0.8));
+    instance.truckParams = readTruckParams();
     
     return true;
 }

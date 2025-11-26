@@ -119,7 +119,14 @@ double Decoder::evaluateSingleDroneTrip(const Route& trip, int droneId) {
     
     double totalEnergy = 0;
     double currentLoad = 0;
-    
+    const int height = 50;
+
+    double takeoffSpeed = instance.droneParams.takeoffSpeed;
+    double landingSpeed = instance.droneParams.landingSpeed;
+
+    double takeoffTime = takeoffSpeed != 0 ? height / takeoffSpeed : 0;
+    double landingTime = landingSpeed != 0 ? height / landingSpeed : 0;
+
     for (int custId : trip.customers) {
         currentLoad += instance.customers[custId - 1].demand;
     }
@@ -131,7 +138,7 @@ double Decoder::evaluateSingleDroneTrip(const Route& trip, int droneId) {
         double travelTime = distance / instance.droneParams.cruiseSpeed;
         
         double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
-        double energy = power * travelTime;
+        double energy = power * (takeoffTime + travelTime + landingTime);
         totalEnergy += energy;
         
         // Sau khi lấy mẫu, tải trọng giảm
@@ -143,7 +150,7 @@ double Decoder::evaluateSingleDroneTrip(const Route& trip, int droneId) {
     double distance = instance.getDistance(prevNode, 0);
     double travelTime = distance / instance.droneParams.cruiseSpeed;
     double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
-    totalEnergy += power * travelTime;
+    totalEnergy += power * (takeoffTime + travelTime + landingTime);
     
     return totalEnergy / 1000.0;    // Chuyển sang kJ
 }

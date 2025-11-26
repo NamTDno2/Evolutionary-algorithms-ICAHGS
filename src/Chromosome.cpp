@@ -131,23 +131,6 @@ Chromosome Chromosome::crossover(const Chromosome &p1, const Chromosome &p2, std
             }
         }
     }
-
-    // if (child.assignment[5] > child.num_technicians_)
-    // {
-    //     std::cout << "Crossover check: Customer " << (*child.customers_)[5].id
-    //               << " is staff-only and assigned to vehicle ID " << child.assignment[5] << "\n";
-    // }
-    // if (child.assignment[6] > child.num_technicians_)
-    // {
-    //     std::cout << "Crossover check: Customer " << (*child.customers_)[6].id
-    //               << " is staff-only and assigned to vehicle ID " << child.assignment[6] << "\n";
-    // }
-    // if (child.assignment[9] > child.num_technicians_)
-    // {
-    //     std::cout << "Crossover check: Customer " << (*child.customers_)[9].id
-    //               << " is staff-only and assigned to vehicle ID " << child.assignment[9] << "\n";
-    // }
-
     return child;
 }
 
