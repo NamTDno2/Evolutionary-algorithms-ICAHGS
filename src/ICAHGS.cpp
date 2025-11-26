@@ -164,33 +164,79 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
     ParetoRanking::calculateCrowdingDistance(solutions);
     
     // ========== BƯỚC 2: Group by Front ==========
-    std::map<int, std::vector<Individual>> fronts;
+    // Use map<int, Front> so each rank maps to a Front that contains a vector of countries
+    std::map<int, Front> fronts;
     for (auto& ind : population) {
         int rank = ind.solution.paretoRank;
-        fronts[rank].push_back(ind);
+        fronts[rank].countries.push_back(ind);
+        fronts[rank].rankCompletionTime += ind.solution.systemCompletionTime;
+        fronts[rank].rankWaitingTime += ind.solution.totalSampleWaitingTime;
     }
     
     std::cout << "Fronts structure:" << std::endl;
     for (auto& [rank, front] : fronts) {
-        std::cout << "  Front " << rank << ": " << front.size() << " solutions" << std::endl;
+        std::cout << "  Front " << rank << ": " << front.countries.size() << " solutions" << std::endl;
     }
+
+    // ========== TÍNH POWER CHO INDIVIDUAL ===========
+
+    
+    double fitness = 0;
+     for (auto& [rank, front] : fronts) {
+        if (front.countries.size() == 0) continue;
+        for (auto& ind : front.countries) {
+            // Skip invalid (infeasible) solutions
+            if (ind.solution.systemCompletionTime == INF ||
+                ind.solution.totalSampleWaitingTime == INF) {
+                ind.power = -1;
+                continue;
+            }
+            fitness = ind.solution.systemCompletionTime/front.rankCompletionTime + ind.solution.totalSampleWaitingTime/front.rankWaitingTime;
+            fitness = fitness*(rank-1)*2;
+            ind.power = std::min(1.0 / fitness, 1e6);
+                
+        }
+     }
     
     // ========== BƯỚC 3: Chọn Imperialists từ Fronts ==========
     std::vector<Individual> imperialists;
+    double totalImperialistPower = 0;
     
     for (auto& [rank, front] : fronts) {
-        // Shuffle để random chọn
-        std::shuffle(front.begin(), front.end(), rng);
-        
+        // Shuffle the countries in this front to randomize selection
+        // std::shuffle(front.countries.begin(), front.countries.end(), rng);
+
+        // Sort by power (descending), feasible solutions first (power >= 0)
+        sort(front.countries.begin(), front.countries.end(),
+             [](const Individual& a, const Individual& b) {
+                 // Feasible solutions come first (power >= 0)
+                 if ((a.power >= 0) != (b.power >= 0)) {
+                     return a.power >= 0;  // Feasible before infeasible
+                 }
+                 // Both feasible: sort by power descending
+                 if (a.power >= 0 && b.power >= 0) {
+                     return a.power > b.power;
+                 }
+                 // Both infeasible: leave as is
+                 return false;
+             });
+
         std::cout << "Selecting from Front " << rank << "..." << std::endl;
-        
-        for (auto& ind : front) {
+
+        for (auto& ind : front.countries) {
+            // Skip infeasible individuals (power == -1)
+            std::cout << "  Power " << ind.power << std::endl;
+            if (ind.power < 0) {
+                continue;
+            }
+
             imperialists.push_back(ind);
-            std::cout << "  Selected imperialist #" << imperialists.size() 
-                      << " (rank=" << ind.solution.paretoRank 
-                      << ", CT=" << ind.solution.systemCompletionTime 
-                      << ")" << std::endl;
-            
+            totalImperialistPower += ind.power;
+            std::cout << "  Selected imperialist #" << imperialists.size()
+                      << " (rank=" << ind.solution.paretoRank
+                      << ", CT=" << ind.solution.systemCompletionTime
+                      << ", power=" << ind.power << ")" << std::endl;
+
             if (imperialists.size() >= (size_t)numImperialists) {
                 break;
             }
@@ -213,6 +259,7 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
         empire.imperialist = imp;
         empire.power = 0;
         empires.push_back(empire);
+        
     }
     
     std::cout << "Created " << empires.size() << " empires" << std::endl;
@@ -224,10 +271,37 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
         empires[empireIdx].colonies.push_back(population[i]);
         colonyIndex++;
     }
+   
+   // Distribute remaining individuals as colonies proportionally to empire imperialist power
+    // int coloniesDistributed = 0;
+    // int totalColonies = population.size() - numImperialists;
+    
+    // for (size_t e = 0; e < empires.size(); e++) {
+    //     // Calculate portion of total power for this empire
+    //     double portion = empires[e].imperialist.power / totalImperialistPower; 
+        
+    //     int numColoniesToAssign;
+    //     if (e == empires.size() - 1) {
+    //         // Last empire gets all remaining colonies 
+    //         numColoniesToAssign = totalColonies - coloniesDistributed;
+    //     } else {
+    //         numColoniesToAssign = static_cast<int>(std::round(portion * totalColonies));
+    //     }
+        
+    //     // Assign colonies from population to this empire
+    //     for (int c = 0; c < numColoniesToAssign && (numImperialists + coloniesDistributed) < population.size(); c++) {
+    //         empires[e].colonies.push_back(population[numImperialists + coloniesDistributed]);
+    //         coloniesDistributed++;
+    //     }
+        
+    //     std::cout << "  Empire " << e << " assigned " << empires[e].colonies.size() 
+    //               << " colonies (portion=" << (portion * 100.0) << "%)" << std::endl;
+    // }
+
     
     // Tính initial power
     for (auto& empire : empires) {
-        empire.power = calculateEmpirePower(empire);
+        empire.power = calculateEmpirePower(empire, 0.01);
     }
     
     std::cout << "Distributed " << (population.size() - numImperialists) 
@@ -284,13 +358,16 @@ void ICAHGS::assimilationAndRevolution() {
         }
         
         // Update empire power
-        empire.power = calculateEmpirePower(empire);
+        empire.power = calculateEmpirePower(empire, 0.01);
     }
 }
 
 
 void ICAHGS::imperialisticCompetition() {
     if (empires.size() <= 1) return;
+
+    
+    
     
     int weakestIdx = selectWeakestEmpire();
     
@@ -335,13 +412,13 @@ void ICAHGS::imperialisticCompetition() {
         double currentPower = 0;
         for (size_t i = 0; i < empires.size(); ++i) {
             currentPower += empires[i].power;
-            if (pick <= currentPower) {
+            if (pick <= currentPower && winnerIdx != weakestIdx) {
                 winnerIdx = i;
                 break;
             }
         }
 
-        if (winnerIdx != -1 && winnerIdx != weakestIdx) {
+        if (winnerIdx != -1) {
             empires[winnerIdx].colonies.push_back(
                 std::move(empires[weakestIdx].colonies[colonyIdx]));
             empires[weakestIdx].colonies.erase(
@@ -429,19 +506,31 @@ void ICAHGS::updateParetoArchive(const Solution& solution) {
     }
 }
 
-double ICAHGS::calculateEmpirePower(const Empire& empire) {
-    double impPower = 1.0 / (empire.imperialist.solution.paretoRank + 1.0);
-    
+double ICAHGS::calculateEmpirePower(const Empire& empire, double xi) {
+    // double impPower = 1.0 / (empire.imperialist.solution.paretoRank + 1.0);
+
+    // if (!empire.colonies.empty()) {
+    //     double avgColonyPower = 0;
+    //     for (const auto& colony : empire.colonies) {
+    //         avgColonyPower += 1.0 / (colony.solution.paretoRank + 1.0);
+    //     }
+    //     avgColonyPower /= empire.colonies.size();
+        
+    //     impPower = impPower + 0.1 * avgColonyPower;
+    // }
+
+    double impPower = empire.imperialist.power;
+
     if (!empire.colonies.empty()) {
         double avgColonyPower = 0;
         for (const auto& colony : empire.colonies) {
-            avgColonyPower += 1.0 / (colony.solution.paretoRank + 1.0);
+            avgColonyPower += colony.power;
         }
         avgColonyPower /= empire.colonies.size();
-        
-        impPower = impPower + 0.1 * avgColonyPower;
-    }
     
+    impPower = impPower + xi * avgColonyPower;
+    }
+
     return impPower;
 }
 

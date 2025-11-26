@@ -162,8 +162,9 @@ struct Individual {
     // vector<int> permutation;  // bộ gen hoán vị
     Chromosome chrom;      // Chromosome representation
     Solution solution;             // lời giải sau khi decoded từ hoán vị
+    double power;
     
-    Individual() {}
+    Individual() : power(0) {}
     Individual(Chromosome c) : chrom(c) {}
 };
 
@@ -178,6 +179,15 @@ struct Empire {
     int getTotalSize() const {
         return 1 + colonies.size();
     }
+};
+
+//Front structure
+struct Front {
+    vector<Individual> countries;
+    double rankCompletionTime;  
+    double rankWaitingTime;
+
+    Front() : rankCompletionTime(0), rankWaitingTime(0) {}
 };
 
 #endif // DATASTRUCTURES_H

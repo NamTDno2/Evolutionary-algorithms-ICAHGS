@@ -34,6 +34,7 @@ private:
 
     // Initialization
     void initializePopulation();
+    void calculateIndividualPower(std::vector<Individual>& population);
     void createEmpires(std::vector<Individual>& population);
 
     // **THÊM MỚI: Duplicate detection**
@@ -50,7 +51,7 @@ private:
     
     // Pareto operations
     void updateParetoArchive(const Solution& solution);
-    double calculateEmpirePower(const Empire& empire);
+    double calculateEmpirePower(const Empire& empire, double xi);
     
     // Utilities
     int selectRandomColony(Empire& empire);
