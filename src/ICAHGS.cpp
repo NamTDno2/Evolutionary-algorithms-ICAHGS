@@ -236,54 +236,50 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
 
 
 
+// Trong ICAHGS.cpp
+
 void ICAHGS::assimilationAndRevolution() {
     for (auto& empire : empires) {
         for (size_t c = 0; c < empire.colonies.size(); c++) {
-            // Crossover (Assimilation)
+            // 1. Crossover
             Chromosome offspring = Chromosome::crossover(
                 empire.imperialist.chrom,
                 empire.colonies[c].chrom, rng);
             
-            // Mutation (Revolution)
-            // mutate(offspring, 0.05);
+            // 2. Mutation
             offspring.mutate(0.05, rng);
             
-            // Decode
+            // 3. Decode ban đầu
             Solution offspringSol = decoder.decode(offspring, instance);
             
-            // **TODO: KIỂM TRA DUPLICATE**
-            // if (isDuplicate(offspringSol)) {
-            //     // Nếu trùng, thử mutation mạnh hơn
-            //     mutate(offspring, 0.15);  // Mutation rate cao hơn
-            //     offspringSol = decoder.decode(offspring);
-                
-            //     // Check lại
-            //     if (isDuplicate(offspringSol)) {
-            //         continue;  // Skip nếu vẫn trùng
-            //     }
-            // }
+            // 4. Local Search
+            // Chạy 50 iterations để tinh chỉnh
+            offspringSol = localSearch.improve(offspringSol, 50);
             
-            // Local search (CULPRIT)
-            // offspringSol = localSearch.improve(offspringSol, 50);
+            // 5. ĐỒNG BỘ NGƯỢC
+            // Cập nhật lại Gen từ Lời giải đã được Local Search tối ưu
+            updateChromosomeFromSolution(offspringSol, offspring);
             
-            // Update archive
+            // Gán lại Gen đã update vào Solution để lưu trữ
+            offspringSol.chrom = offspring;
+            
+            // 6. Update Archive
             updateParetoArchive(offspringSol);
             
-            // Replace colony if better
+            // 7. Thay thế Colony nếu tốt hơn (Logic giữ nguyên)
             if (offspringSol.dominates(empire.colonies[c].solution) ||
                 (offspringSol.systemCompletionTime < INF && 
                  empire.colonies[c].solution.systemCompletionTime >= INF)) {
-                empire.colonies[c].chrom = offspring;
-                empire.colonies[c].solution = offspringSol;
                 
-                // Revolution
+                empire.colonies[c].chrom = offspring; // Lưu Gen mới
+                empire.colonies[c].solution = offspringSol; // Lưu Lời giải mới
+                
+                // Revolution (Thách đấu Imperialist)
                 if (offspringSol.dominates(empire.imperialist.solution)) {
                     std::swap(empire.imperialist, empire.colonies[c]);
                 }
             }
         }
-        
-        // Update empire power
         empire.power = calculateEmpirePower(empire);
     }
 }
@@ -427,6 +423,39 @@ void ICAHGS::updateParetoArchive(const Solution& solution) {
     if (!isDominated) {
         paretoArchive.push_back(solution);
     }
+}
+
+
+void ICAHGS::updateChromosomeFromSolution(const Solution& sol, Chromosome& chrom) {
+    int numCustomers = instance.getNumCustomers();
+    std::vector<int> new_assignment(numCustomers);
+    std::vector<int> new_permutation;
+    new_permutation.reserve(numCustomers);
+
+    // 1. Quét qua các tuyến xe tải (Trucks)
+    // Truck ID trong assignment chạy từ 1 đến numTrucks
+    for (size_t i = 0; i < sol.truckRoutes.size(); ++i) {
+        int vehicleID = i + 1; 
+        for (int custId : sol.truckRoutes[i].customers) {
+            new_assignment[custId - 1] = vehicleID;
+            new_permutation.push_back(custId);
+        }
+    }
+
+    // 2. Quét qua các tuyến Drone
+    // Drone ID trong assignment chạy từ (numTrucks + 1) trở đi
+    for (size_t i = 0; i < sol.droneRoutes.size(); ++i) {
+        int vehicleID = instance.numTrucks + i + 1;
+        for (const auto& trip : sol.droneRoutes[i]) {
+            for (int custId : trip.customers) {
+                new_assignment[custId - 1] = vehicleID;
+                new_permutation.push_back(custId);
+            }
+        }
+    }
+
+    // 3. Cập nhật lại Chromosome
+    chrom.update(new_assignment, new_permutation);
 }
 
 double ICAHGS::calculateEmpirePower(const Empire& empire) {

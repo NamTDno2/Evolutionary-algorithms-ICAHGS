@@ -39,6 +39,14 @@ public:
     static Chromosome crossover(const Chromosome& p1, const Chromosome& p2, std::mt19937& rng);
     void mutate(double mutationRate, std::mt19937& rng);
     void printGenotype() const;
+    void update(const std::vector<int>& new_assign, const std::vector<int>& new_perm) {
+        if (new_assign.size() != assignment.size() || new_perm.size() != permutation.size()) {
+            // Safety check
+            return; 
+        }
+        this->assignment = new_assign;
+        this->permutation = new_perm;
+    }
 };
 
 #endif // CHROMOSOME_H

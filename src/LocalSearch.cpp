@@ -1,7 +1,7 @@
 #include "LocalSearch.h"
 #include <algorithm>
 #include <queue>
-#include <iostream> // Thêm để debug
+#include <iostream> 
 
 Solution LocalSearch::improve(const Solution& solution, int maxIterations) {
     Solution current = solution;
@@ -14,8 +14,7 @@ Solution LocalSearch::improve(const Solution& solution, int maxIterations) {
         Move bestMove = findBestMove(current);
         
         if (bestMove.customer1 == -1) {
-            // No feasible move found
-            break;
+            break; // Không tìm thấy nước đi hợp lệ nào
         }
         
         // Apply move
@@ -38,7 +37,6 @@ Solution LocalSearch::improve(const Solution& solution, int maxIterations) {
         
         current = neighbor;
         
-        // Early stopping
         if (iterWithoutImprovement > 20) {
             break;
         }
@@ -51,35 +49,26 @@ LocalSearch::Move LocalSearch::findBestMove(const Solution& solution) {
     Move bestMove;
     bestMove.deltaCost = INF;
     
-    // Collect all customers in solution
+    // Collect all customers
     std::vector<int> allCustomers;
-    
-    // From truck routes
     for (const auto& route : solution.truckRoutes) {
-        for (int cust : route.customers) {
-            allCustomers.push_back(cust);
-        }
+        for (int cust : route.customers) allCustomers.push_back(cust);
     }
-    
-    // From drone routes
     for (const auto& trips : solution.droneRoutes) {
         for (const auto& trip : trips) {
-            for (int cust : trip.customers) {
-                allCustomers.push_back(cust);
-            }
+            for (int cust : trip.customers) allCustomers.push_back(cust);
         }
     }
     
-    // Try RELOCATE moves
+    // --- 1. Try RELOCATE moves ---
     for (int cust : allCustomers) {
         if (isTabu(cust, Move::RELOCATE)) continue;
         
-        // Try moving to different positions in truck routes
+        // A. Try moving to Truck routes
         for (size_t truckId = 0; truckId < solution.truckRoutes.size(); truckId++) {
             const auto& route = solution.truckRoutes[truckId];
-            
+            // Thử mọi vị trí chèn
             for (size_t pos = 0; pos <= route.customers.size(); pos++) {
-                // Create neighbor
                 Move move;
                 move.type = Move::RELOCATE;
                 move.customer1 = cust;
@@ -87,41 +76,47 @@ LocalSearch::Move LocalSearch::findBestMove(const Solution& solution) {
                 move.toPos = pos;
                 
                 Solution neighbor = applyMove(solution, move);
-                evaluator.evaluate(neighbor);
+                evaluator.evaluate(neighbor); // Check infeasible (INF cost)
                 
-                double delta = calculateDelta(solution, neighbor);
-                
-                if (delta < bestMove.deltaCost && neighbor.systemCompletionTime < INF) {
-                    bestMove = move;
-                    bestMove.deltaCost = delta;
+                // CHỈ CHẤP NHẬN NẾU HỢP LỆ
+                if (neighbor.systemCompletionTime < INF) {
+                    double delta = calculateDelta(solution, neighbor);
+                    if (delta < bestMove.deltaCost) {
+                        bestMove = move;
+                        bestMove.deltaCost = delta;
+                    }
                 }
             }
         }
         
-        // Try moving to drone routes (if flexible customer)
+        // B. Try moving to Drone routes
         const Customer& customer = instance.customers[cust - 1];
-        if (!customer.isStaffOnly) {
+        if (!customer.isStaffOnly) { // Ràng buộc cứng: StaffOnly không đi Drone
             for (size_t droneId = 0; droneId < solution.droneRoutes.size(); droneId++) {
-                // Try adding to new trip
+                // Đơn giản hóa: Chỉ thử tạo chuyến mới (New Trip) để tiết kiệm thời gian tính toán
+                // Hoặc chèn vào cuối các chuyến hiện có
+                
+                // Option 1: New Trip
                 Move move;
                 move.type = Move::RELOCATE;
                 move.customer1 = cust;
-                move.toRoute = droneId + 1000;  // Offset to distinguish from truck
+                move.toRoute = droneId + 1000; // Offset ID cho Drone
                 
                 Solution neighbor = applyMove(solution, move);
                 evaluator.evaluate(neighbor);
                 
-                double delta = calculateDelta(solution, neighbor);
-                
-                if (delta < bestMove.deltaCost && neighbor.systemCompletionTime < INF) {
-                    bestMove = move;
-                    bestMove.deltaCost = delta;
+                if (neighbor.systemCompletionTime < INF) {
+                    double delta = calculateDelta(solution, neighbor);
+                    if (delta < bestMove.deltaCost) {
+                        bestMove = move;
+                        bestMove.deltaCost = delta;
+                    }
                 }
             }
         }
     }
     
-    // Try SWAP moves (simplified version)
+    // --- 2. Try SWAP moves ---
     for (size_t i = 0; i < allCustomers.size(); i++) {
         for (size_t j = i + 1; j < allCustomers.size(); j++) {
             int cust1 = allCustomers[i];
@@ -129,19 +124,40 @@ LocalSearch::Move LocalSearch::findBestMove(const Solution& solution) {
             
             if (isTabu(cust1, Move::SWAP) || isTabu(cust2, Move::SWAP)) continue;
             
+            // Check nhanh: Nếu 1 trong 2 là StaffOnly, không được swap với khách đang ở trên Drone
+            // Tuy nhiên để chính xác và đơn giản, ta cứ swap rồi check sau
+            
             Move move;
             move.type = Move::SWAP;
             move.customer1 = cust1;
             move.customer2 = cust2;
             
             Solution neighbor = applyMove(solution, move);
+            
+            // CHECK RÀNG BUỘC StaffOnly TRƯỚC KHI EVALUATE
+            bool feasible = true;
+            for (const auto& trips : neighbor.droneRoutes) {
+                for (const auto& trip : trips) {
+                    for (int c : trip.customers) {
+                        if (instance.customers[c-1].isStaffOnly) {
+                            feasible = false; break;
+                        }
+                    }
+                    if (!feasible) break;
+                }
+                if (!feasible) break;
+            }
+            
+            if (!feasible) continue; // Bỏ qua nước đi vi phạm
+            
             evaluator.evaluate(neighbor);
             
-            double delta = calculateDelta(solution, neighbor);
-            
-            if (delta < bestMove.deltaCost && neighbor.systemCompletionTime < INF) {
-                bestMove = move;
-                bestMove.deltaCost = delta;
+            if (neighbor.systemCompletionTime < INF) {
+                double delta = calculateDelta(solution, neighbor);
+                if (delta < bestMove.deltaCost) {
+                    bestMove = move;
+                    bestMove.deltaCost = delta;
+                }
             }
         }
     }
@@ -153,49 +169,36 @@ Solution LocalSearch::applyMove(const Solution& solution, const Move& move) {
     Solution result = solution;
     
     if (move.type == Move::RELOCATE) {
-        // Remove customer from current position
         bool found = false;
         
-        // Try truck routes
+        // 1. Xóa khỏi vị trí cũ (Truck)
         for (auto& route : result.truckRoutes) {
-            auto it = std::find(route.customers.begin(), route.customers.end(), 
-                              move.customer1);
+            auto it = std::find(route.customers.begin(), route.customers.end(), move.customer1);
             if (it != route.customers.end()) {
                 route.customers.erase(it);
-                found = true;
-                break;
+                found = true; break;
             }
         }
-        
-        // Try drone routes
+        // 2. Xóa khỏi vị trí cũ (Drone)
         if (!found) {
             for (auto& trips : result.droneRoutes) {
                 for (auto& trip : trips) {
-                    auto it = std::find(trip.customers.begin(), trip.customers.end(),
-                                      move.customer1);
+                    auto it = std::find(trip.customers.begin(), trip.customers.end(), move.customer1);
                     if (it != trip.customers.end()) {
                         trip.customers.erase(it);
-                        found = true;
-                        break; // Dừng ngay khi tìm thấy và xóa
+                        found = true; break;
                     }
                 }
-                if (found) break; // Dừng vòng lặp ngoài nếu đã tìm thấy
+                if (found) break;
             }
         }
         
-        // Insert at new position
-        if (move.toRoute < 1000) {
-            // Insert into truck route
-            auto& target_customers = result.truckRoutes[move.toRoute].customers;
-            size_t insert_pos = move.toPos;
-            if (insert_pos > target_customers.size()) {
-                insert_pos = target_customers.size();
-            }
-            target_customers.insert(
-                target_customers.begin() + insert_pos,
-                move.customer1);
-        } else {
-            // Insert into drone route (new trip)
+        // 3. Chèn vào vị trí mới
+        if (move.toRoute < 1000) { // Vào Truck
+            auto& target = result.truckRoutes[move.toRoute].customers;
+            size_t pos = std::min((size_t)move.toPos, target.size()); // Safety check
+            target.insert(target.begin() + pos, move.customer1);
+        } else { // Vào Drone (Tạo chuyến mới)
             int droneId = move.toRoute - 1000;
             Route newTrip;
             newTrip.customers.push_back(move.customer1);
@@ -203,62 +206,38 @@ Solution LocalSearch::applyMove(const Solution& solution, const Move& move) {
         }
         
     } else if (move.type == Move::SWAP) {
-        // --- FIX: Sử dụng index thay vì con trỏ để tránh lỗi bộ nhớ ---
-        int route_type1 = -1, route_idx1 = -1, trip_idx1 = -1, cust_idx1 = -1;
-        int route_type2 = -1, route_idx2 = -1, trip_idx2 = -1, cust_idx2 = -1;
-
-        // Tìm vị trí của customer1
-        for (size_t i = 0; i < result.truckRoutes.size() && route_type1 == -1; ++i) {
-            for (size_t j = 0; j < result.truckRoutes[i].customers.size(); ++j) {
-                if (result.truckRoutes[i].customers[j] == move.customer1) {
-                    route_type1 = 0; route_idx1 = i; cust_idx1 = j; break;
+        // Tìm địa chỉ tham chiếu của 2 khách hàng
+        int* ptr1 = nullptr;
+        int* ptr2 = nullptr;
+        
+        // Helper lambda để tìm con trỏ tới khách hàng
+        auto findCustomerPtr = [&](int c) -> int* {
+            for (auto& route : result.truckRoutes) {
+                for (auto& val : route.customers) if (val == c) return &val;
+            }
+            for (auto& trips : result.droneRoutes) {
+                for (auto& trip : trips) {
+                    for (auto& val : trip.customers) if (val == c) return &val;
                 }
             }
-        }
-        if (route_type1 == -1) {
-            for (size_t i = 0; i < result.droneRoutes.size() && route_type1 == -1; ++i) {
-                for (size_t j = 0; j < result.droneRoutes[i].size(); ++j) {
-                    for (size_t k = 0; k < result.droneRoutes[i][j].customers.size(); ++k) {
-                        if (result.droneRoutes[i][j].customers[k] == move.customer1) {
-                            route_type1 = 1; route_idx1 = i; trip_idx1 = j; cust_idx1 = k; break;
-                        }
-                    }
-                    if (route_type1 != -1) break;
-                }
-            }
-        }
-
-        // Tìm vị trí của customer2
-        for (size_t i = 0; i < result.truckRoutes.size() && route_type2 == -1; ++i) {
-            for (size_t j = 0; j < result.truckRoutes[i].customers.size(); ++j) {
-                if (result.truckRoutes[i].customers[j] == move.customer2) {
-                    route_type2 = 0; route_idx2 = i; cust_idx2 = j; break;
-                }
-            }
-        }
-        if (route_type2 == -1) {
-            for (size_t i = 0; i < result.droneRoutes.size() && route_type2 == -1; ++i) {
-                for (size_t j = 0; j < result.droneRoutes[i].size(); ++j) {
-                    for (size_t k = 0; k < result.droneRoutes[i][j].customers.size(); ++k) {
-                        if (result.droneRoutes[i][j].customers[k] == move.customer2) {
-                            route_type2 = 1; route_idx2 = i; trip_idx2 = j; cust_idx2 = k; break;
-                        }
-                    }
-                    if (route_type2 != -1) break;
-                }
-            }
-        }
-
-        // Thực hiện hoán đổi nếu tìm thấy cả hai
-        if (route_type1 != -1 && route_type2 != -1) {
-            int& cust1_ref = (route_type1 == 0) ? result.truckRoutes[route_idx1].customers[cust_idx1] : result.droneRoutes[route_idx1][trip_idx1].customers[cust_idx1];
-            int& cust2_ref = (route_type2 == 0) ? result.truckRoutes[route_idx2].customers[cust_idx2] : result.droneRoutes[route_idx2][trip_idx2].customers[cust_idx2];
-            std::swap(cust1_ref, cust2_ref);
+            return nullptr;
+        };
+        
+        ptr1 = findCustomerPtr(move.customer1);
+        ptr2 = findCustomerPtr(move.customer2);
+        
+        if (ptr1 && ptr2) {
+            std::swap(*ptr1, *ptr2);
         }
     }
     
+    // Reset objectives để Evaluator tính lại từ đầu
+    result.systemCompletionTime = 0;
+    result.totalSampleWaitingTime = 0;
+    
     return result;
 }
+
 
 bool LocalSearch::isTabu(int customer, int moveType) const {
     return tabuList.find(std::make_pair(customer, moveType)) != tabuList.end();

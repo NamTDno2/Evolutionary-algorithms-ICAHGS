@@ -56,6 +56,8 @@ private:
     int selectRandomColony(Empire& empire);
     int selectWeakestEmpire();
     bool convergenceReached();
+
+    void updateChromosomeFromSolution(const Solution& sol, Chromosome& chrom);
 };
 
 #endif // ICAHGS_H

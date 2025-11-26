@@ -45,13 +45,44 @@ Solution Decoder::decode(const Chromosome &chrom, const Instance &inst)
             // Drone
             int drone_index = vehicle_id - num_technicians_ - 1;
             auto& droneTrips = solution.droneRoutes[drone_index];
+            bool createNewTrip = false;
 
-            // Kiểm tra chuyến hiện tại
-            if (droneTrips.empty() || evaluateSingleDroneTrip(droneTrips.back(), drone_index) + inst.customers[customer_idx].demand > inst.droneParams.maxCapacity)
+            if (droneTrips.empty()) {
+                createNewTrip = true;
+            } else {
+                // 1. Kiểm tra Tải trọng
+                double currentLoad = 0;
+                for (int c : droneTrips.back().customers) {
+                    currentLoad += instance.customers[c - 1].demand;
+                }
+                double newLoad = currentLoad + instance.customers[customer_idx].demand;
+                
+                if (newLoad > instance.droneParams.maxCapacity) {
+                    createNewTrip = true;
+                } 
+                else {
+                    // 2. Kiểm tra Năng lượng (Giả lập thêm khách vào để tính thử)
+                    Route tempTrip = droneTrips.back();
+                    tempTrip.customers.push_back(customer_id);
+                    
+                    // Lưu ý: evaluateSingleDroneTrip trả về kJ
+                    double neededEnergy = evaluateSingleDroneTrip(tempTrip, drone_index);
+                    
+                    if (neededEnergy > instance.droneParams.maxEnergy) {
+                        createNewTrip = true;
+                    }
+                }
+            }
+
+            if (createNewTrip)
             {
                 // Tạo chuyến mới
                 Route newTrip;
                 newTrip.customers.push_back(customer_id);
+                
+                // Check ngay xem chuyến mới có feasible không (đặc biệt với khách quá xa hoặc quá nặng)
+                // Nếu cần thiết thì xử lý infeasible tại đây
+                
                 droneTrips.push_back(newTrip);
             }
             else
