@@ -225,7 +225,6 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
 
         for (auto& ind : front.countries) {
             // Skip infeasible individuals (power == -1)
-            std::cout << "  Power " << ind.power << std::endl;
             if (ind.power < 0) {
                 continue;
             }
@@ -311,6 +310,8 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
 
 
 void ICAHGS::assimilationAndRevolution() {
+
+    std::vector<Individual> currentPopulation;
     for (auto& empire : empires) {
         for (size_t c = 0; c < empire.colonies.size(); c++) {
             // Crossover (Assimilation)
@@ -355,11 +356,61 @@ void ICAHGS::assimilationAndRevolution() {
                     std::swap(empire.imperialist, empire.colonies[c]);
                 }
             }
+
+            currentPopulation.push_back(empire.colonies[c]);
+
+
         }
+        currentPopulation.push_back(empire.imperialist);
         
         // Update empire power
-        empire.power = calculateEmpirePower(empire, 0.01);
+        
+        // empire.power = calculateEmpirePower(empire, 0.01);
     }
+
+    std::vector<Solution*> solutions;
+    for (auto& ind : currentPopulation) {
+        solutions.push_back(&ind.solution);
+    }
+    ParetoRanking::nonDominatedSorting(solutions);
+    ParetoRanking::calculateCrowdingDistance(solutions);
+    
+    // ========== BƯỚC 2: Group by Front ==========
+    // Use map<int, Front> so each rank maps to a Front that contains a vector of countries
+    std::map<int, Front> fronts;
+    for (auto& ind : currentPopulation) {
+        int rank = ind.solution.paretoRank;
+        fronts[rank].countries.push_back(ind);
+        fronts[rank].rankCompletionTime += ind.solution.systemCompletionTime;
+        fronts[rank].rankWaitingTime += ind.solution.totalSampleWaitingTime;
+    }
+    
+    
+
+    // ========== TÍNH POWER CHO INDIVIDUAL ===========
+
+    
+    double fitness = 0;
+     for (auto& [rank, front] : fronts) {
+        if (front.countries.size() == 0) continue;
+        for (auto& ind : front.countries) {
+            // Skip invalid (infeasible) solutions
+            if (ind.solution.systemCompletionTime == INF ||
+                ind.solution.totalSampleWaitingTime == INF) {
+                ind.power = -1;
+                continue;
+            }
+            fitness = ind.solution.systemCompletionTime/front.rankCompletionTime + ind.solution.totalSampleWaitingTime/front.rankWaitingTime;
+            fitness = fitness*(rank-1)*2;
+            ind.power = std::min(1.0 / fitness, 1e6);
+                
+        }
+     }
+    
+     for(auto& empire : empires){
+        empire.power = calculateEmpirePower(empire, 0.01);
+     }
+
 }
 
 
