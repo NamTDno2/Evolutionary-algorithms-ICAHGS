@@ -36,6 +36,15 @@ std::vector<Solution> ICAHGS::run(int maxIterations) {
         // Assimilation and Revolution
         assimilationAndRevolution();
         
+        // cập nhật lại rank thuộc địa sau mỗi vòng lặp
+        std::vector<Solution*> allSolutions;
+        for (auto& empire : empires) {
+            allSolutions.push_back(&empire.imperialist.solution);
+            for (auto& colony : empire.colonies) {
+                allSolutions.push_back(&colony.solution);
+            }
+        }
+
         // Imperialistic Competition
         imperialisticCompetition();
         
@@ -377,7 +386,7 @@ std::vector<int> ICAHGS::orderCrossover(const std::vector<int>& parent1,
         int gene = parent2[parent2_pos];
         if (!in_offspring[gene]) {
             offspring[offspring_pos] = gene;
-            in_offspring[gene] = true; // FIX: Đánh dấu gene đã được thêm
+            in_offspring[gene] = true; 
             offspring_pos = (offspring_pos + 1) % n;
         }
         parent2_pos = (parent2_pos + 1) % n;

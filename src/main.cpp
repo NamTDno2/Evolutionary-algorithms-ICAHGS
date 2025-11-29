@@ -96,15 +96,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // --- THÊM ĐOẠN NÀY ĐỂ DEBUG ---
-    cout << "DEBUG CHECK:" << endl;
-    cout << "Truck Max Speed: " << instance.truckParams.maxSpeed << endl;
-    cout << "Drone Cruise Speed: " << instance.droneParams.cruiseSpeed << endl;
-    if (instance.truckParams.maxSpeed < 1e-6 || instance.droneParams.cruiseSpeed < 1e-6) {
-        cerr << "ERROR: Tốc độ xe/drone bằng 0! Kiểm tra lại đường dẫn file config JSON." << endl;
-        return 1; // Dừng chương trình ngay
-    }
-    // ------------------------------
 
     cout << "\nInstance loaded successfully!" << endl;
     cout << "  Customers: " << instance.getNumCustomers() << endl;

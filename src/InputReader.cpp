@@ -12,7 +12,7 @@ using json = nlohmann::json;
 DroneParams readDroneParams(int index)
 {
     DroneParams droneParams;
-    std::ifstream file("config/drone_linear_config.json");
+    std::ifstream file("../config/drone_linear_config.json");
     if (!file.is_open())
     {
         std::cerr << "Không thể mở file JSON!\n";
@@ -39,7 +39,7 @@ DroneParams readDroneParams(int index)
 
 TruckParams readTruckParams() {
     TruckParams truckParams;
-    std::ifstream file("config/Truck_config.json");
+    std::ifstream file("../config/Truck_config.json");
     if (!file.is_open())
     {
         std::cerr << "Không thể mở file JSON!\n";
