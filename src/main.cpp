@@ -85,7 +85,7 @@ void exportResults(const vector<Solution>& paretoFront,
 int main(int argc, char* argv[]) {
     cout << "=== ICAHGS for MSSVTDE ===" << endl;
     
-    string filename = "../data/10.5.1.txt";
+    string filename = "./data/10.5.1.txt";
     if (argc > 1) {
         filename = argv[1];
     }

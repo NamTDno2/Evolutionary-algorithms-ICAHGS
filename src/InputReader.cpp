@@ -39,7 +39,7 @@ DroneParams readDroneParams(int index)
 
 TruckParams readTruckParams() {
     TruckParams truckParams;
-    std::ifstream file("../config/Truck_config.json");
+    std::ifstream file("./config/Truck_config.json");
     if (!file.is_open())
     {
         std::cerr << "Không thể mở file JSON!\n";
