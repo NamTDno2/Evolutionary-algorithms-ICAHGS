@@ -85,7 +85,7 @@ void exportResults(const vector<Solution>& paretoFront,
 int main(int argc, char* argv[]) {
     cout << "=== ICAHGS for MSSVTDE ===" << endl;
     
-    string filename = "./data/10.5.1.txt";
+    string filename = "./data/6.5.1.txt";
     if (argc > 1) {
         filename = argv[1];
     }
@@ -102,9 +102,9 @@ int main(int argc, char* argv[]) {
     cout << "  Trucks: " << instance.numTrucks << endl;
     cout << "  Drones: " << instance.numDrones << endl;
     
-    int populationSize = 50;
-    int numEmpires = 5;
-    int maxIterations = 100;
+    int populationSize = 20;
+    int numEmpires = 4;
+    int maxIterations = 10;
     
     if (argc > 2) populationSize = stoi(argv[2]);
     if (argc > 3) numEmpires = stoi(argv[3]);

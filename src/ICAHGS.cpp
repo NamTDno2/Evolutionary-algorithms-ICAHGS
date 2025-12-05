@@ -250,6 +250,8 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
 // Trong ICAHGS.cpp
 
 void ICAHGS::assimilationAndRevolution() {
+    std::vector<Solution*> population;
+
     for (auto& empire : empires) {
         for (size_t c = 0; c < empire.colonies.size(); c++) {
             // 1. Crossover
@@ -291,8 +293,50 @@ void ICAHGS::assimilationAndRevolution() {
                 }
             }
         }
+
+        // Aggregate the population to do Non-Dominated Sorting
+        population.push_back(&empire.imperialist.solution);
+        for (auto& colony : empire.colonies) {
+            population.push_back(&colony.solution);
+        }
     }
-    
+
+    //  -----------------------------------------------------------------------------------------
+    //  DEBUG: log rank and target variables before sorting
+    std::cout<<"=============================================";
+    std::cout<<"\nBefore Sorting:";
+    for (auto& empire : empires) {
+        cout<<"\nImperialist "<<"\t";
+        // empire.imperialist.solution.chrom.printGenotype();
+        cout<<"Rank: "<<empire.imperialist.solution.paretoRank<<", SYST = "<<empire.imperialist.solution.systemCompletionTime<<", WAIT = "<<empire.imperialist.solution.totalSampleWaitingTime<<endl;
+        for (size_t c = 0; c < empire.colonies.size(); c++) {
+            cout<<"Colony "<<c<<"\t";
+            // empire.colonies[c].solution.chrom.printGenotype();
+            cout<<"Rank: "<<empire.colonies[c].solution.paretoRank<<", SYST = "<<empire.colonies[c].solution.systemCompletionTime<<", WAIT = "<<empire.colonies[c].solution.totalSampleWaitingTime<<endl;
+        }
+    }
+    //  ------------------------------------------------------------------------------------------
+
+    // Sort the newly modified population
+    ParetoRanking::nonDominatedSorting(population);
+
+    //  -----------------------------------------------------------------------------------------
+    //  DEBUG: log rank and target variables after sorting
+    std::cout<<"---------------------------------------------";
+    std::cout<<"\nAfter Sorting:";
+    for (auto& empire : empires) {
+        cout<<"\n\nImperialist "<<"\t";
+        // empire.imperialist.solution.chrom.printGenotype();
+        cout<<"Rank: "<<empire.imperialist.solution.paretoRank<<", SYST = "<<empire.imperialist.solution.systemCompletionTime<<", WAIT = "<<empire.imperialist.solution.totalSampleWaitingTime<<endl;
+        for (size_t c = 0; c < empire.colonies.size(); c++) {
+            cout<<"Colony "<<c<<"\t";
+            // empire.colonies[c].solution.chrom.printGenotype();
+            cout<<"Rank: "<<empire.colonies[c].solution.paretoRank<<", SYST = "<<empire.colonies[c].solution.systemCompletionTime<<", WAIT = "<<empire.colonies[c].solution.totalSampleWaitingTime<<endl;
+        }
+    }
+    cout<<endl;
+    //  -----------------------------------------------------------------------------------------
+
     // Sort empires after each assimilation round
     sortEmpiresByTierRanking();
 }
