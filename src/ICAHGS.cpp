@@ -189,8 +189,12 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
     
     for (auto& [rank, front] : fronts) {
         // Shuffle để random chọn
-        std::shuffle(front.begin(), front.end(), rng);
-        
+        // std::shuffle(front.begin(), front.end(), rng);
+
+        // Sắp xếp các Individual trong front theo CrowdingDistance
+        sort(front.begin(), front.end(), [](const Individual& a, const Individual& b) {
+            return a.solution.crowdingDistance > b.solution.crowdingDistance;
+        });
         std::cout << "Selecting from Front " << rank << "..." << std::endl;
         
         for (auto& ind : front) {
@@ -234,10 +238,8 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
         colonyIndex++;
     }
     
-    // Tính initial power
-    for (auto& empire : empires) {
-        empire.power = calculateEmpirePower(empire);
-    }
+    // Sort empires based on three-tier ranking
+    sortEmpiresByTierRanking();
     
     std::cout << "Distributed " << (population.size() - numImperialists) 
               << " colonies among " << empires.size() << " empires" << std::endl;
@@ -289,69 +291,38 @@ void ICAHGS::assimilationAndRevolution() {
                 }
             }
         }
-        empire.power = calculateEmpirePower(empire);
     }
+    
+    // Sort empires after each assimilation round
+    sortEmpiresByTierRanking();
 }
 
 
 void ICAHGS::imperialisticCompetition() {
     if (empires.size() <= 1) return;
     
-    int weakestIdx = selectWeakestEmpire();
     
-    if (empires[weakestIdx].colonies.empty()) {
+    
+    if (empires[empires.size() - 1].colonies.empty()) {
         // Empire has no colonies, collapse it
-        // Move imperialist to strongest empire as colony
-        
-        int strongestIdx = -1;
-        double maxPower = -1.0;
-
-        // ✅ Sửa logic tìm đế chế mạnh nhất
-        for (size_t i = 0; i < empires.size(); ++i) {
-            if (i == static_cast<size_t>(weakestIdx)) continue; // Bỏ qua đế chế yếu nhất
-            if (strongestIdx == -1 || empires[i].power > maxPower) {
-                maxPower = empires[i].power;
-                strongestIdx = i;
-            }
-        }
-        
-        if (strongestIdx != -1) { // Đảm bảo tìm được đế chế mạnh nhất
-             empires[strongestIdx].colonies.push_back(std::move(empires[weakestIdx].imperialist));
-        }
-       
-        empires.erase(empires.begin() + weakestIdx);
+        // Move imperialist to strongest empire (index 0) as colony
+        empires[0].colonies.push_back(std::move(empires[empires.size() - 1].imperialist));
+        empires.erase(empires.begin() + empires.size() - 1);
         
         std::cout << "  Empire collapsed. Remaining empires: " 
                   << empires.size() << std::endl;
     } else {
         // Transfer weakest colony to the winner of the competition
-        int colonyIdx = selectRandomColony(empires[weakestIdx]);
+        int colonyIdx = selectRandomColony(empires[empires.size() - 1]);
         
-        // Logic to select the winner empire based on power (probability)
-        double totalPower = 0;
-        for (const auto& emp : empires) {
-            totalPower += emp.power;
-        }
 
-        std::uniform_real_distribution<double> dist(0.0, totalPower);
-        double pick = dist(rng);
+        std::uniform_int_distribution<int> dist(0, empires.size() - 1 - 1);
+        int winnerIdx = dist(rng);
         
-        int winnerIdx = -1;
-        double currentPower = 0;
-        for (size_t i = 0; i < empires.size(); ++i) {
-            currentPower += empires[i].power;
-            if (pick <= currentPower) {
-                winnerIdx = i;
-                break;
-            }
-        }
-
-        if (winnerIdx != -1 && winnerIdx != weakestIdx) {
-            empires[winnerIdx].colonies.push_back(
-                std::move(empires[weakestIdx].colonies[colonyIdx]));
-            empires[weakestIdx].colonies.erase(
-                empires[weakestIdx].colonies.begin() + colonyIdx);
-        }
+        empires[winnerIdx].colonies.push_back(
+            std::move(empires[empires.size() - 1].colonies[colonyIdx]));
+        empires[empires.size() - 1].colonies.erase(
+            empires[empires.size() - 1].colonies.begin() + colonyIdx);
     }
 }
 
@@ -467,20 +438,88 @@ void ICAHGS::updateChromosomeFromSolution(const Solution& sol, Chromosome& chrom
     chrom.update(new_assignment, new_permutation);
 }
 
-double ICAHGS::calculateEmpirePower(const Empire& empire) {
-    double impPower = 1.0 / (empire.imperialist.solution.paretoRank + 1.0);
+void ICAHGS::sortEmpiresByTierRanking() {
+    // Three-tier ranking system for empire sorting:
+    // (1) Tier 1: Fewer infeasible solutions is better
+    // (2) Tier 2: If tied on infeasibility, fewer dominated solutions is better
+    // (3) Tier 3: If tied on domination, higher average crowding distance is better
     
-    if (!empire.colonies.empty()) {
-        double avgColonyPower = 0;
-        for (const auto& colony : empire.colonies) {
-            avgColonyPower += 1.0 / (colony.solution.paretoRank + 1.0);
-        }
-        avgColonyPower /= empire.colonies.size();
-        
-        impPower = impPower + 0.1 * avgColonyPower;
+    std::sort(empires.begin(), empires.end(), 
+        [this](const Empire& a, const Empire& b) {
+            int infeasibleA = countInfeasibleSolutions(a);
+            int infeasibleB = countInfeasibleSolutions(b);
+            
+            // Tier 1: Compare infeasible solutions count
+            if (infeasibleA != infeasibleB) {
+                return infeasibleA < infeasibleB;  // Lower is better
+            }
+            
+            // Tier 2: Compare dominated solutions count
+            int dominatedA = countDominatedSolutions(a);
+            int dominatedB = countDominatedSolutions(b);
+            if (dominatedA != dominatedB) {
+                return dominatedA < dominatedB;  // Lower is better
+            }
+            
+            // Tier 3: Compare average crowding distance
+            double crowdingA = calculateAverageCrowdingDistance(a);
+            double crowdingB = calculateAverageCrowdingDistance(b);
+            return crowdingA > crowdingB;  // Higher is better
+        });
+}
+
+int ICAHGS::countInfeasibleSolutions(const Empire& empire) const {
+    int count = 0;
+    
+    // Check imperialist
+    if (empire.imperialist.solution.systemCompletionTime >= INF) {
+        count++;
     }
     
-    return impPower;
+    // Check all colonies
+    for (const auto& colony : empire.colonies) {
+        if (colony.solution.systemCompletionTime >= INF) {
+            count++;
+        }
+    }
+    
+    return count;
+}
+
+int ICAHGS::countDominatedSolutions(const Empire& empire) const {
+    int count = 0;
+    
+    // Check imperialist (rank 0 = non-dominated, rank > 0 = dominated)
+    if (empire.imperialist.solution.paretoRank > 0) {
+        count++;
+    }
+    
+    // Check all colonies
+    for (const auto& colony : empire.colonies) {
+        if (colony.solution.paretoRank > 0) {
+            count++;
+        }
+    }
+    
+    return count;
+}
+
+double ICAHGS::calculateAverageCrowdingDistance(const Empire& empire) const {
+    if (empire.getTotalSize() == 0) {
+        return 0.0;
+    }
+    
+    double totalCrowdingDistance = 0.0;
+    
+    // Add imperialist's crowding distance
+    totalCrowdingDistance += empire.imperialist.solution.crowdingDistance;
+    
+    // Add all colonies' crowding distances
+    for (const auto& colony : empire.colonies) {
+        totalCrowdingDistance += colony.solution.crowdingDistance;
+    }
+    
+    return totalCrowdingDistance / empire.getTotalSize();
 }
 
 int ICAHGS::selectRandomColony(Empire& empire) {
@@ -490,19 +529,7 @@ int ICAHGS::selectRandomColony(Empire& empire) {
     return dist(rng);
 }
 
-int ICAHGS::selectWeakestEmpire() {
-    if (empires.empty()) return -1;
-
-    int weakestIdx = 0;
-    // ✅ Sửa: Khởi tạo minPower với power của phần tử đầu tiên
-    double minPower = empires[0].power; 
-    
-    for (size_t i = 1; i < empires.size(); i++) {
-        if (empires[i].power < minPower) {
-            minPower = empires[i].power;
-            weakestIdx = i;
-        }
-    }
-    
-    return weakestIdx;
-}
+// int ICAHGS::selectWeakestEmpire() {
+//     if (empires.empty()) return -1;
+//     return empires.size() - 1;
+// }

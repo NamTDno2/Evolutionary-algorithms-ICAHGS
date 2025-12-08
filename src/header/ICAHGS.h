@@ -50,7 +50,12 @@ private:
     
     // Pareto operations
     void updateParetoArchive(const Solution& solution);
-    double calculateEmpirePower(const Empire& empire);
+    void sortEmpiresByTierRanking();
+    
+    // Helper functions for three-tier ranking
+    int countInfeasibleSolutions(const Empire& empire) const;
+    int countDominatedSolutions(const Empire& empire) const;
+    double calculateAverageCrowdingDistance(const Empire& empire) const;
     
     // Utilities
     int selectRandomColony(Empire& empire);
