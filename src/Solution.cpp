@@ -90,7 +90,7 @@ void SolutionEvaluator::evaluateTruckRoute(Route& route, int truckId) {
         
         prevNode = custId;
     }
-    
+
     route.totalWaitingTime = totalWaiting;
 }
 
@@ -103,6 +103,9 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     
     double totalLoad = 0;
     for (int custId : route.customers) {
+        if (instance.customers[custId-1].isStaffOnly) {
+            return false;  // Infeasible!
+        }
         totalLoad += instance.customers[custId - 1].demand;
     }
     if (totalLoad > instance.droneParams.maxCapacity) {
@@ -117,6 +120,9 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     int prevNode = 0;
     
     for (int custId : route.customers) {
+        if (instance.customers[custId-1].isStaffOnly) {
+            return false;  // Infeasible!
+        }
         double distance = instance.getDistance(prevNode, custId);
         double travelTime = distance / instance.droneParams.cruiseSpeed;
         currentTime += travelTime;
@@ -139,6 +145,9 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     
     double totalWaiting = 0;
     for (int custId : route.customers) {
+        if (instance.customers[custId-1].isStaffOnly) {
+            return false;  // Infeasible!
+        }
         double distance = instance.getDistance(prevNode, custId);
         double travelTime = distance / instance.droneParams.cruiseSpeed;
         currentTime += travelTime;

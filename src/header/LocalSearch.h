@@ -4,7 +4,6 @@
 #include "DataStructures.h"
 #include "Solution.h"
 #include <set>
-#include <utility>
 
 class LocalSearch {
 public:
@@ -28,18 +27,32 @@ private:
         int fromPos, toPos;
         double deltaCost;
         
-        Move() : type(RELOCATE), customer1(-1), customer2(-1), 
+        Move() : type(RELOCATE), customer1(-1), customer2(-1),
                 fromRoute(-1), toRoute(-1), fromPos(-1), toPos(-1),
                 deltaCost(INF) {}
     };
     
+    // ========== OPTIMIZED FUNCTIONS ==========
+    std::vector<int> getCandidateCustomers(const Solution& solution, int maxCandidates = 30);
     Move findBestMove(const Solution& solution);
     Solution applyMove(const Solution& solution, const Move& move);
-    
     bool isTabu(int customer, int moveType) const;
     void updateTabuList(int customer, int moveType);
-    
     double calculateDelta(const Solution& current, const Solution& neighbor);
+    
+    // ========== IMPROVEMENT FUNCTIONS ==========
+    // Improvement 1: Balance drone load
+    void balanceDroneLoad(Solution& solution);
+    
+    // Improvement 2: 2-opt for truck routes
+    std::vector<int> twoOpt(const std::vector<int>& route);
+    double calculateRouteDistance(const std::vector<int>& route);
+    
+    // Improvement 3: Inter-truck swap
+    void interTruckSwap(Solution& solution);
+    
+    // Improvement 4: Split long drone trips
+    void splitLongDroneTrips(Solution& solution);
 };
 
 #endif // LOCALSEARCH_H

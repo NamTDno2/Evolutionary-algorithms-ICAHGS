@@ -148,7 +148,7 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
     file.close();
     
     double tempMaxFlight = instance.droneParams.maxFlightTime;
-    instance.droneParams = readDroneParams(2); // changable config (ENUM: 1, 2, 3, 4)
+    instance.droneParams = readDroneParams(3); // changable config (ENUM: 1, 2, 3, 4)
     instance.droneParams.maxFlightTime = tempMaxFlight;
     
     instance.truckParams = readTruckParams();

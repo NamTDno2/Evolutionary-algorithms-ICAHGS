@@ -1,16 +1,20 @@
 #ifndef DATASTRUCTURES_H
 #define DATASTRUCTURES_H
 
+
 #include <vector>
 #include <string>
 #include <limits>
 #include <cmath> 
 #include <cstdint>
+#include <iostream>
 #include "Chromosome.h"
 using namespace std;
 
+
 // Constants
 const double INF = std::numeric_limits<double>::infinity();
+
 
 // Customer structure
 struct Customer {
@@ -25,6 +29,7 @@ struct Customer {
                  serviceTimeTruck(0), serviceTimeDrone(0) {}
 };
 
+
 // Time interval for time-dependent speed
 struct TimeInterval {
     double startTime;  // Ta
@@ -35,6 +40,7 @@ struct TimeInterval {
     TimeInterval(double s, double e, double sig) 
         : startTime(s), endTime(e), sigma(sig) {}
 };
+
 
 // Drone parameters
 struct DroneParams {
@@ -52,6 +58,7 @@ struct DroneParams {
                     maxFlightTime(0) {}
 };
 
+
 // Truck parameters
 struct TruckParams {
     double maxSpeed;  // Vmax (m/s)
@@ -59,6 +66,7 @@ struct TruckParams {
     
     TruckParams() : maxSpeed(0) {}
 };
+
 
 // Instance data
 struct Instance {
@@ -72,28 +80,82 @@ struct Instance {
     double depotX = 0.0;
     double depotY = 0.0;
     
+    // ✅ NEW: Distance cache matrix
+    std::vector<std::vector<double>> distanceMatrix;
+    
     int getNumCustomers() const { return customers.size(); }
     
-    // Calculate Euclidean distance
+    // Calculate Euclidean distance (4-arg version)
     double getDistance(double x1, double y1, double x2, double y2) const {
         double dx = x2 - x1;
         double dy = y2 - y1;
         return sqrt(dx * dx + dy * dy);
     }
     
+    // ✅ NEW: Use cache for 2-arg version
     double getDistance(int custId1, int custId2) const {
-        if (custId1 == 0) { // Depot
-            return getDistance(depotX, depotY, 
+        // Check cache validity
+        if (custId1 < 0 || custId1 >= (int)distanceMatrix.size() ||
+            custId2 < 0 || custId2 >= (int)distanceMatrix.size()) {
+            // Fallback to calculation if cache not ready
+            if (custId1 == 0) { // Depot
+                return getDistance(depotX, depotY, 
+                                 customers[custId2-1].x, customers[custId2-1].y);
+            }
+            if (custId2 == 0) { // Depot
+                return getDistance(customers[custId1-1].x, customers[custId1-1].y,
+                                 depotX, depotY);
+            }
+            return getDistance(customers[custId1-1].x, customers[custId1-1].y,
                              customers[custId2-1].x, customers[custId2-1].y);
         }
-        if (custId2 == 0) { // Depot
-            return getDistance(customers[custId1-1].x, customers[custId1-1].y,
-                             depotX, depotY);
+        // Return from cache (very fast!)
+        return distanceMatrix[custId1][custId2];
+    }
+    
+    // ✅ NEW: Build distance cache
+    void buildDistanceCache() {
+        int numNodes = getNumCustomers() + 1;  // +1 for depot (node 0)
+        
+        // Resize matrix
+        distanceMatrix.resize(numNodes, std::vector<double>(numNodes, 0.0));
+        
+        std::cout << "Building distance cache for " << numNodes << " nodes..." 
+                  << std::endl;
+        
+        // Pre-compute all distances
+        for (int i = 0; i < numNodes; i++) {
+            for (int j = 0; j < numNodes; j++) {
+                if (i == j) {
+                    distanceMatrix[i][j] = 0.0;
+                } else {
+                    double dx, dy;
+                    
+                    if (i == 0) {
+                        // From depot
+                        dx = depotX - customers[j - 1].x;
+                        dy = depotY - customers[j - 1].y;
+                    } else if (j == 0) {
+                        // To depot
+                        dx = customers[i - 1].x - depotX;
+                        dy = customers[i - 1].y - depotY;
+                    } else {
+                        // Between customers
+                        dx = customers[i - 1].x - customers[j - 1].x;
+                        dy = customers[i - 1].y - customers[j - 1].y;
+                    }
+                    
+                    distanceMatrix[i][j] = std::sqrt(dx * dx + dy * dy);
+                }
+            }
         }
-        return getDistance(customers[custId1-1].x, customers[custId1-1].y,
-                         customers[custId2-1].x, customers[custId2-1].y);
+        
+        std::cout << "Distance cache built (" << numNodes << "x" << numNodes 
+                  << ") - Size: " 
+                  << (numNodes * numNodes * 8 / 1024) << "KB" << std::endl;
     }
 };
+
 
 // Route structure
 struct Route {
@@ -112,6 +174,7 @@ struct Route {
     bool isEmpty() const { return customers.empty(); }
     int size() const { return customers.size(); }
 };
+
 
 // Solution structure
 struct Solution {
@@ -157,6 +220,7 @@ struct Solution {
     }
 };
 
+
 // Individual in population (Empire or Colony)
 struct Individual {
     // vector<int> permutation;  // bộ gen hoán vị
@@ -166,6 +230,7 @@ struct Individual {
     Individual() {}
     Individual(Chromosome c) : chrom(c) {}
 };
+
 
 // Empire structure
 struct Empire {
@@ -179,5 +244,6 @@ struct Empire {
         return 1 + colonies.size();
     }
 };
+
 
 #endif // DATASTRUCTURES_H

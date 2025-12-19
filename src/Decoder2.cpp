@@ -42,6 +42,12 @@ Solution Decoder::decode(const Chromosome &chrom, const Instance &inst)
         }
         else
         {
+            if (instance.customers[customer_idx].isStaffOnly) {
+                // Staff-only customers MUST use truck, not drone
+                auto& truckRoute = solution.truckRoutes[0];
+                truckRoute.customers.push_back(customer_id);
+                continue;  // Skip to next customer - important
+            }
             // Drone
             int drone_index = vehicle_id - num_technicians_ - 1;
             auto& droneTrips = solution.droneRoutes[drone_index];

@@ -63,6 +63,18 @@ private:
     bool convergenceReached();
 
     void updateChromosomeFromSolution(const Solution& sol, Chromosome& chrom);
+    // Hàm helper để tìm colony yếu nhất trong một empire
+    // Dựa trên: front yếu nhất → crowding distance nhỏ nhất
+    int selectWeakestColonyByPareto(const Empire& empire);
+
+    // Hàm helper để tìm front yếu nhất (rank cao nhất) trong empire
+    int findWorstFrontRankInEmpire(const Empire& empire) const;
+
+    // Hàm helper để tìm colony có CD nhỏ nhất trong một front cụ thể
+    int selectColonyByLowestCrowdingInFront(const Empire& empire, int frontRank);
+
+    int selectStrongestEmpire() const; // để chọn empire thắng khi collapse
+
 };
 
 #endif // ICAHGS_H

@@ -250,6 +250,8 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
 // Trong ICAHGS.cpp
 
 void ICAHGS::assimilationAndRevolution() {
+    std::vector<Solution*> population;
+
     for (auto& empire : empires) {
         for (size_t c = 0; c < empire.colonies.size(); c++) {
             // 1. Crossover
@@ -291,8 +293,50 @@ void ICAHGS::assimilationAndRevolution() {
                 }
             }
         }
+
+        // Aggregate the population to do Non-Dominated Sorting
+        population.push_back(&empire.imperialist.solution);
+        for (auto& colony : empire.colonies) {
+            population.push_back(&colony.solution);
+        }
     }
-    
+
+    //  -----------------------------------------------------------------------------------------
+    //  DEBUG: log rank and target variables before sorting
+    std::cout<<"=============================================";
+    std::cout<<"\nBefore Sorting:";
+    for (auto& empire : empires) {
+        cout<<"\nImperialist "<<"\t";
+        // empire.imperialist.solution.chrom.printGenotype();
+        cout<<"Rank: "<<empire.imperialist.solution.paretoRank<<", SYST = "<<empire.imperialist.solution.systemCompletionTime<<", WAIT = "<<empire.imperialist.solution.totalSampleWaitingTime<<endl;
+        for (size_t c = 0; c < empire.colonies.size(); c++) {
+            cout<<"Colony "<<c<<"\t";
+            // empire.colonies[c].solution.chrom.printGenotype();
+            cout<<"Rank: "<<empire.colonies[c].solution.paretoRank<<", SYST = "<<empire.colonies[c].solution.systemCompletionTime<<", WAIT = "<<empire.colonies[c].solution.totalSampleWaitingTime<<endl;
+        }
+    }
+    //  ------------------------------------------------------------------------------------------
+
+    // Sort the newly modified population
+    ParetoRanking::nonDominatedSorting(population);
+
+    //  -----------------------------------------------------------------------------------------
+    //  DEBUG: log rank and target variables after sorting
+    std::cout<<"---------------------------------------------";
+    std::cout<<"\nAfter Sorting:";
+    for (auto& empire : empires) {
+        cout<<"\n\nImperialist "<<"\t";
+        // empire.imperialist.solution.chrom.printGenotype();
+        cout<<"Rank: "<<empire.imperialist.solution.paretoRank<<", SYST = "<<empire.imperialist.solution.systemCompletionTime<<", WAIT = "<<empire.imperialist.solution.totalSampleWaitingTime<<endl;
+        for (size_t c = 0; c < empire.colonies.size(); c++) {
+            cout<<"Colony "<<c<<"\t";
+            // empire.colonies[c].solution.chrom.printGenotype();
+            cout<<"Rank: "<<empire.colonies[c].solution.paretoRank<<", SYST = "<<empire.colonies[c].solution.systemCompletionTime<<", WAIT = "<<empire.colonies[c].solution.totalSampleWaitingTime<<endl;
+        }
+    }
+    cout<<endl;
+    //  -----------------------------------------------------------------------------------------
+
     // Sort empires after each assimilation round
     sortEmpiresByTierRanking();
 }
@@ -300,31 +344,64 @@ void ICAHGS::assimilationAndRevolution() {
 
 void ICAHGS::imperialisticCompetition() {
     if (empires.size() <= 1) return;
-    
-    
-    
-    if (empires[empires.size() - 1].colonies.empty()) {
-        // Empire has no colonies, collapse it
-        // Move imperialist to strongest empire (index 0) as colony
-        empires[0].colonies.push_back(std::move(empires[empires.size() - 1].imperialist));
-        empires.erase(empires.begin() + empires.size() - 1);
-        
-        std::cout << "  Empire collapsed. Remaining empires: " 
+
+    // Giả định empires đã được sort: empire yếu nhất là cuối
+    int weakestIdx = static_cast<int>(empires.size()) - 1;
+
+    Empire& weakestEmpire = empires[weakestIdx];
+
+    if (weakestEmpire.colonies.empty()) {
+        // Empire yếu không còn colony → sụp đổ, chuyển imperialist sang empire mạnh nhất
+        int strongestIdx = selectStrongestEmpire();
+        if (strongestIdx != -1 && strongestIdx != weakestIdx) {
+            empires[strongestIdx].colonies.push_back(std::move(weakestEmpire.imperialist));
+        }
+        empires.erase(empires.begin() + weakestIdx);
+
+        std::cout << "  Empire collapsed. Remaining empires: "
                   << empires.size() << std::endl;
     } else {
-        // Transfer weakest colony to the winner of the competition
-        int colonyIdx = selectRandomColony(empires[empires.size() - 1]);
-        
+        // Empire yếu vẫn còn colony → chọn colony yếu nhất theo Pareto + crowding
+        int weakestColonyIdx = selectWeakestColonyByPareto(weakestEmpire);
+        if (weakestColonyIdx < 0 ||
+            weakestColonyIdx >= static_cast<int>(weakestEmpire.colonies.size())) {
+            return; // safety
+        }
 
-        std::uniform_int_distribution<int> dist(0, empires.size() - 1 - 1);
-        int winnerIdx = dist(rng);
-        
+        // Chọn empire thắng dựa trên power (ngoại trừ weakestIdx)
+        double totalPower = 0.0;
+        for (size_t i = 0; i < empires.size(); ++i) {
+            if (i == static_cast<size_t>(weakestIdx)) continue;
+            totalPower += empires[i].power;
+        }
+        if (totalPower <= 0.0) return;
+
+        std::uniform_real_distribution<double> dist(0.0, totalPower);
+        double pick = dist(rng);
+
+        int winnerIdx = -1;
+        double acc = 0.0;
+        for (size_t i = 0; i < empires.size(); ++i) {
+            if (i == static_cast<size_t>(weakestIdx)) continue;
+            acc += empires[i].power;
+            if (pick <= acc) {
+                winnerIdx = static_cast<int>(i);
+                break;
+            }
+        }
+        if (winnerIdx == -1) {
+            // Fallback: chọn empire đầu tiên khác weakestIdx
+            winnerIdx = (weakestIdx == 0 ? 1 : 0);
+        }
+
+        // Chuyển colony từ weakest → winner
         empires[winnerIdx].colonies.push_back(
-            std::move(empires[empires.size() - 1].colonies[colonyIdx]));
-        empires[empires.size() - 1].colonies.erase(
-            empires[empires.size() - 1].colonies.begin() + colonyIdx);
+            std::move(weakestEmpire.colonies[weakestColonyIdx]));
+        weakestEmpire.colonies.erase(
+            weakestEmpire.colonies.begin() + weakestColonyIdx);
     }
 }
+
 
 std::vector<int> ICAHGS::orderCrossover(const std::vector<int>& parent1,
                                          const std::vector<int>& parent2) {
@@ -528,6 +605,93 @@ int ICAHGS::selectRandomColony(Empire& empire) {
     std::uniform_int_distribution<int> dist(0, empire.colonies.size() - 1);
     return dist(rng);
 }
+// ========== Tìm worst front rank trong empire ==========
+int ICAHGS::findWorstFrontRankInEmpire(const Empire& empire) const {
+    int worstRank = 0;
+    
+    // Check imperialist
+    worstRank = std::max(worstRank, empire.imperialist.solution.paretoRank);
+    
+    // Check all colonies
+    for (const auto& colony : empire.colonies) {
+        worstRank = std::max(worstRank, colony.solution.paretoRank);
+    }
+    
+    return worstRank;
+}
+
+// ========== Chọn colony có CD nhỏ nhất trong front cụ thể ==========
+int ICAHGS::selectColonyByLowestCrowdingInFront(
+    const Empire& empire, 
+    int targetFrontRank) {
+    
+    int selectedIdx = -1;
+    double minCrowding = INF;
+    
+    // Duyệt qua tất cả colonies
+    for (size_t i = 0; i < empire.colonies.size(); i++) {
+        // Chỉ xét colonies trong target front
+        if (empire.colonies[i].solution.paretoRank == targetFrontRank) {
+            double cd = empire.colonies[i].solution.crowdingDistance;
+            
+            if (cd < minCrowding) {
+                minCrowding = cd;
+                selectedIdx = i;
+            }
+        }
+    }
+    
+    // Nếu không tìm thấy colony trong target front,
+    // có thể try random hoặc expand tìm front kế tiếp
+    if (selectedIdx == -1 && !empire.colonies.empty()) {
+    std::uniform_int_distribution<int> dist(
+        0,
+        static_cast<int>(empire.colonies.size()) - 1
+    );
+    selectedIdx = dist(rng);
+}
+
+    
+    return selectedIdx;
+}
+
+// ========== Chọn colony yếu nhất trong empire ==========
+int ICAHGS::selectWeakestColonyByPareto(const Empire& empire) {
+    if (empire.colonies.empty()) {
+        return -1;  // Không có colony
+    }
+    
+    // Bước 1: Tìm worst front rank trong empire
+    int worstFrontRank = findWorstFrontRankInEmpire(empire);
+    
+    // Bước 2: Tìm colony có CD nhỏ nhất trong worst front
+    int weakestColonyIdx = selectColonyByLowestCrowdingInFront(empire, worstFrontRank);
+    
+    if (weakestColonyIdx == -1) {
+        // Fallback: Chỉ return bất kỳ index nào
+        weakestColonyIdx = 0;
+    }
+    
+    std::cout << " → Weakest colony: Front " << worstFrontRank 
+              << ", Index " << weakestColonyIdx 
+              << ", CD = " << empire.colonies[weakestColonyIdx].solution.crowdingDistance 
+              << std::endl;
+    
+    return weakestColonyIdx;
+}
+int ICAHGS::selectStrongestEmpire() const {
+    if (empires.empty()) return -1;
+    int bestIdx = 0;
+    double bestPower = empires[0].power;
+    for (size_t i = 1; i < empires.size(); ++i) {
+        if (empires[i].power > bestPower) {
+            bestPower = empires[i].power;
+            bestIdx = static_cast<int>(i);
+        }
+    }
+    return bestIdx;
+}
+
 
 // int ICAHGS::selectWeakestEmpire() {
 //     if (empires.empty()) return -1;

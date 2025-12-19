@@ -29,8 +29,6 @@ private:
                          cost(INF) {}
     };
     
-    InsertionMove findBestTruckInsertion(int custId, Solution& solution);
-    InsertionMove findBestDroneInsertion(int custId, Solution& solution);
     
     double evaluateInsertionCost(const Solution& before, 
                                  const Solution& after);
