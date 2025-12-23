@@ -14,6 +14,8 @@ public:
     Solution decodeIncremental(const std::vector<int>& permutation);
     //  NEW: Decode from Chromosome
     Solution decode(const Chromosome& chrom, const Instance& inst);
+    //  NEW: Split Algorithm - Dynamic Programming based decoder
+    Solution decodeBySplit(const Chromosome& chrom);
     
 private:
     const Instance& instance;
@@ -48,11 +50,24 @@ private:
                                       int custId, 
                                       int droneId, 
                                       int tripId,
-                                      bool newTrip);
+                                      int position);
+    
+    // Split Algorithm helpers - DISABLED (causes infeasibility)
+    // struct SplitLabel {
+    //     double cost;
+    //     int pred;
+    //     int vehicleType;  // 0=truck, 1=drone
+    //     int vehicleId;
+    //     SplitLabel() : cost(INF), pred(-1), vehicleType(-1), vehicleId(-1) {}
+    // };
+    
+    // double computeRouteCost(const std::vector<int>& customers, int vehicleType, int vehicleId);
+    // bool isRouteFeasible(const std::vector<int>& customers, int vehicleType, int vehicleId);
     
     // Helper: Evaluate single route (not entire solution)
     double evaluateSingleTruckRoute(const Route& route, int truckId);
     double evaluateSingleDroneTrip(const Route& trip, int droneId);
+    double calculateTripFlightTime(const Route& trip, int droneId);
 };
 
 #endif // DECODER_H

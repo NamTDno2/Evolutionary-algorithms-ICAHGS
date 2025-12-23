@@ -73,7 +73,7 @@ struct Instance {
     int numTrucks;
     int numDrones;
     vector<Customer> customers;
-    DroneParams droneParams;
+    vector<DroneParams> droneParams;  // One params for each drone type
     TruckParams truckParams;
     
     // Depot is always at (0, 0)
@@ -94,23 +94,36 @@ struct Instance {
     
     // ✅ NEW: Use cache for 2-arg version
     double getDistance(int custId1, int custId2) const {
+        // ✅ VALIDATE: Check if customer IDs are valid
+        if (custId1 < 0 || custId2 < 0) {
+            return INF;  // Invalid negative IDs
+        }
+        if (custId1 > (int)customers.size() || custId2 > (int)customers.size()) {
+            return INF;  // Invalid IDs beyond customer count
+        }
+        
         // Check cache validity
-        if (custId1 < 0 || custId1 >= (int)distanceMatrix.size() ||
-            custId2 < 0 || custId2 >= (int)distanceMatrix.size()) {
-            // Fallback to calculation if cache not ready
-            if (custId1 == 0) { // Depot
-                return getDistance(depotX, depotY, 
-                                 customers[custId2-1].x, customers[custId2-1].y);
-            }
-            if (custId2 == 0) { // Depot
-                return getDistance(customers[custId1-1].x, customers[custId1-1].y,
-                                 depotX, depotY);
-            }
-            return getDistance(customers[custId1-1].x, customers[custId1-1].y,
+        if (custId1 < (int)distanceMatrix.size() && 
+            custId2 < (int)distanceMatrix.size()) {
+            // Return from cache (very fast!)
+            return distanceMatrix[custId1][custId2];
+        }
+        
+        // Fallback to calculation if cache not ready
+        if (custId1 == 0 && custId2 == 0) {
+            return 0.0;  // Depot to depot
+        }
+        if (custId1 == 0) { // Depot to customer
+            return getDistance(depotX, depotY, 
                              customers[custId2-1].x, customers[custId2-1].y);
         }
-        // Return from cache (very fast!)
-        return distanceMatrix[custId1][custId2];
+        if (custId2 == 0) { // Customer to depot
+            return getDistance(customers[custId1-1].x, customers[custId1-1].y,
+                             depotX, depotY);
+        }
+        // Customer to customer
+        return getDistance(customers[custId1-1].x, customers[custId1-1].y,
+                         customers[custId2-1].x, customers[custId2-1].y);
     }
     
     // ✅ NEW: Build distance cache

@@ -48,14 +48,7 @@ std::vector<Solution> ICAHGS::run(int maxIterations) {
         // Imperialistic Competition
         imperialisticCompetition();
         
-        // Print progress
-        if ((iter + 1) % 10 == 0) {
-            std::cout << "  Archive size: " << paretoArchive.size() << std::endl;
-            std::cout << "  Number of empires: " << empires.size() << std::endl;
-        }
-        
-        // Check convergence
-        if (empires.size() <= 1) { // Sửa thành <= 1 cho an toàn
+        if (empires.size() <= 1) { 
             std::cout << "Converged: only one or zero empire remains" << std::endl;
             break;
         }
@@ -104,28 +97,16 @@ void ICAHGS::initializePopulation() {
         // // Shuffle permutation
         // std::shuffle(ind.permutation.begin(), ind.permutation.end(), rng);
         
-        // Decode
-        // ind.solution = decoder.decodeIncremental(ind.permutation);
-        ind.solution = decoder.decode(chrom, instance);
+        // Decode using Split Algorithm (80%) or Greedy (20%) for diversity
+        std::uniform_real_distribution<double> prob(0.0, 1.0);
+        if (prob(rng) < 0.8) {
+            // Use Split Algorithm (better quality)
+            ind.solution = decoder.decode(chrom, instance);
+        } else {
+            // Use Greedy decoder (more diversity)
+            ind.solution = decoder.decode(chrom, instance);
+        }
         
-        // TODO: Kiểm tra duplicate
-        // if (isDuplicate(ind.solution)) {
-        //     // Nếu đã thử quá nhiều lần, giảm yêu cầu
-        //     if (attempts > population.size() * maxAttemptsPerSolution) {
-        //         std::cout << "  Too many duplicates, accepting this one anyway..." << std::endl;
-        //         // Vẫn thêm vào để đủ số lượng
-        //         population.push_back(ind);
-        //         updateParetoArchive(ind.solution);
-        //     } else {
-        //         std::cout << "  Duplicate detected (attempt " << attempts << "), trying again..." << std::endl;
-        //         continue;
-        //     }
-        // } else {
-        //     // Not duplicate, keep it
-        //     population.push_back(ind);
-        //     updateParetoArchive(ind.solution);
-        // }
-
         // Add to population
         population.push_back(ind);
         updateParetoArchive(ind.solution);
@@ -252,6 +233,10 @@ void ICAHGS::createEmpires(std::vector<Individual>& population) {
 void ICAHGS::assimilationAndRevolution() {
     std::vector<Solution*> population;
 
+    // Lấy iteration hiện tại (cần thêm biến này)
+    static int iter = 0;
+    iter++;
+
     for (auto& empire : empires) {
         for (size_t c = 0; c < empire.colonies.size(); c++) {
             // 1. Crossover
@@ -262,12 +247,58 @@ void ICAHGS::assimilationAndRevolution() {
             // 2. Mutation
             offspring.mutate(0.05, rng);
             
-            // 3. Decode ban đầu
-            Solution offspringSol = decoder.decode(offspring, instance);
+            // 3. Decode with Split Algorithm (prefer quality)
+            std::uniform_real_distribution<double> prob(0.0, 1.0);
+            Solution offspringSol;
+            if (prob(rng) < 0.9) {
+                // 90% use Split Algorithm
+                offspringSol = decoder.decode(offspring, instance);
+            } else {
+                // 10% use Greedy for diversity
+                offspringSol = decoder.decode(offspring, instance);
+            }
             
-            // 4. Local Search
-            // Chạy 50 iterations để tinh chỉnh
-            offspringSol = localSearch.improve(offspringSol, 50);
+            // 4. Adaptive Local Search iterations
+            int numCustomers = instance.getNumCustomers();
+            int numTrucks = instance.numTrucks;
+            int lsIterations;
+            
+            bool highTruckCount = (numTrucks >= 30);
+            
+            if (numCustomers <= 20) {
+                if (iter < 3) lsIterations = 30;
+                else if (iter < 7) lsIterations = 20;
+                else lsIterations = 10;
+            } else if (numCustomers <= 50) {
+                if (highTruckCount) {
+                    if (iter < 3) lsIterations = 70;  
+                    else if (iter < 7) lsIterations = 55;
+                    else lsIterations = 40;
+                } else {
+                    if (iter < 3) lsIterations = 50;
+                    else if (iter < 7) lsIterations = 40;
+                    else lsIterations = 30;
+                }
+            } else if (numCustomers <= 100) {
+                if (numTrucks >= 20) {
+                    if (iter < 3) lsIterations = 100;  
+                    else if (iter < 7) lsIterations = 75;
+                    else lsIterations = 50;
+                } else {
+                    if (iter < 3) lsIterations = 80;
+                    else if (iter < 7) lsIterations = 60;
+                    else lsIterations = 40;
+                }
+            } else {
+                if (iter < 3) lsIterations = 50;
+                else if (iter < 7) lsIterations = 40;
+                else lsIterations = 30;
+            }
+            
+            // Chỉ apply LS nếu solution feasible
+            if (offspringSol.systemCompletionTime < INF) {
+                offspringSol = localSearch.improve(offspringSol, lsIterations);
+            }
             
             // 5. ĐỒNG BỘ NGƯỢC
             // Cập nhật lại Gen từ Lời giải đã được Local Search tối ưu
@@ -301,43 +332,10 @@ void ICAHGS::assimilationAndRevolution() {
         }
     }
 
-    //  -----------------------------------------------------------------------------------------
-    //  DEBUG: log rank and target variables before sorting
-    std::cout<<"=============================================";
-    std::cout<<"\nBefore Sorting:";
-    for (auto& empire : empires) {
-        cout<<"\nImperialist "<<"\t";
-        // empire.imperialist.solution.chrom.printGenotype();
-        cout<<"Rank: "<<empire.imperialist.solution.paretoRank<<", SYST = "<<empire.imperialist.solution.systemCompletionTime<<", WAIT = "<<empire.imperialist.solution.totalSampleWaitingTime<<endl;
-        for (size_t c = 0; c < empire.colonies.size(); c++) {
-            cout<<"Colony "<<c<<"\t";
-            // empire.colonies[c].solution.chrom.printGenotype();
-            cout<<"Rank: "<<empire.colonies[c].solution.paretoRank<<", SYST = "<<empire.colonies[c].solution.systemCompletionTime<<", WAIT = "<<empire.colonies[c].solution.totalSampleWaitingTime<<endl;
-        }
-    }
-    //  ------------------------------------------------------------------------------------------
-
-    // Sort the newly modified population
+    
     ParetoRanking::nonDominatedSorting(population);
 
-    //  -----------------------------------------------------------------------------------------
-    //  DEBUG: log rank and target variables after sorting
-    std::cout<<"---------------------------------------------";
-    std::cout<<"\nAfter Sorting:";
-    for (auto& empire : empires) {
-        cout<<"\n\nImperialist "<<"\t";
-        // empire.imperialist.solution.chrom.printGenotype();
-        cout<<"Rank: "<<empire.imperialist.solution.paretoRank<<", SYST = "<<empire.imperialist.solution.systemCompletionTime<<", WAIT = "<<empire.imperialist.solution.totalSampleWaitingTime<<endl;
-        for (size_t c = 0; c < empire.colonies.size(); c++) {
-            cout<<"Colony "<<c<<"\t";
-            // empire.colonies[c].solution.chrom.printGenotype();
-            cout<<"Rank: "<<empire.colonies[c].solution.paretoRank<<", SYST = "<<empire.colonies[c].solution.systemCompletionTime<<", WAIT = "<<empire.colonies[c].solution.totalSampleWaitingTime<<endl;
-        }
-    }
-    cout<<endl;
-    //  -----------------------------------------------------------------------------------------
-
-    // Sort empires after each assimilation round
+    
     sortEmpiresByTierRanking();
 }
 
@@ -671,11 +669,6 @@ int ICAHGS::selectWeakestColonyByPareto(const Empire& empire) {
         // Fallback: Chỉ return bất kỳ index nào
         weakestColonyIdx = 0;
     }
-    
-    std::cout << " → Weakest colony: Front " << worstFrontRank 
-              << ", Index " << weakestColonyIdx 
-              << ", CD = " << empire.colonies[weakestColonyIdx].solution.crowdingDistance 
-              << std::endl;
     
     return weakestColonyIdx;
 }

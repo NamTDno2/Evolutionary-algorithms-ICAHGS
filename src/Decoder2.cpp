@@ -27,6 +27,14 @@ Solution Decoder::decode(const Chromosome &chrom, const Instance &inst)
     std::map<int, std::vector<int>> routes_by_vehicle;
     for (int customer_id : permutation)
     {
+        //  VALIDATE: customer_id must be valid (1 to numCustomers)
+        if (customer_id < 1 || customer_id > (int)instance.customers.size()) {
+            std::cerr << "WARNING: Invalid customer_id " << customer_id 
+                      << " in permutation (valid range: 1-" 
+                      << instance.customers.size() << "). Skipping." << std::endl;
+            continue;  // Skip invalid customer
+        }
+        
         int customer_idx = customer_id - 1;
         int vehicle_id = assignment[customer_idx];
 
@@ -63,7 +71,7 @@ Solution Decoder::decode(const Chromosome &chrom, const Instance &inst)
                 }
                 double newLoad = currentLoad + instance.customers[customer_idx].demand;
                 
-                if (newLoad > instance.droneParams.maxCapacity) {
+                if (newLoad > instance.droneParams[drone_index].maxCapacity) {
                     createNewTrip = true;
                 } 
                 else {
@@ -74,22 +82,79 @@ Solution Decoder::decode(const Chromosome &chrom, const Instance &inst)
                     // Lưu ý: evaluateSingleDroneTrip trả về kJ
                     double neededEnergy = evaluateSingleDroneTrip(tempTrip, drone_index);
                     
-                    if (neededEnergy > instance.droneParams.maxEnergy) {
+                    if (neededEnergy > instance.droneParams[drone_index].maxEnergy) {
                         createNewTrip = true;
+                    } else {
+                        // 3. Kiểm tra Thời gian bay
+                        double flightTime = calculateTripFlightTime(tempTrip, drone_index);
+                        
+                        if (flightTime > instance.droneParams[drone_index].maxFlightTime) {
+                            createNewTrip = true;
+                        }
                     }
                 }
             }
 
             if (createNewTrip)
             {
-                // Tạo chuyến mới
+                // Tạo chuyến mới và kiểm tra feasibility
                 Route newTrip;
                 newTrip.customers.push_back(customer_id);
                 
-                // Check ngay xem chuyến mới có feasible không (đặc biệt với khách quá xa hoặc quá nặng)
-                // Nếu cần thiết thì xử lý infeasible tại đây
+                // Kiểm tra xem trip mới có vi phạm ràng buộc không
+                double flightTime = calculateTripFlightTime(newTrip, drone_index);
+                double neededEnergy = evaluateSingleDroneTrip(newTrip, drone_index);
                 
-                droneTrips.push_back(newTrip);
+                bool isFlightTimeViolation = (flightTime > instance.droneParams[drone_index].maxFlightTime);
+                bool isEnergyViolation = (neededEnergy > instance.droneParams[drone_index].maxEnergy);
+                bool isCapacityViolation = (instance.customers[customer_idx].demand > instance.droneParams[drone_index].maxCapacity);
+                
+                if (isFlightTimeViolation || isEnergyViolation || isCapacityViolation) {
+                    // HIGH-TRUCK OPTIMIZATION: Try other drones before falling back to trucks
+                    bool assignedToOtherDrone = false;
+                    
+                    if (inst.numTrucks >= 30) {
+                        // For high-truck cases: try ALL other drones first
+                        for (int alt_drone = 0; alt_drone < num_drones_; alt_drone++) {
+                            if (alt_drone == drone_index) continue;  // Skip current drone
+                            
+                            // Test if this customer can be served by alternative drone
+                            Route testTrip;
+                            testTrip.customers.push_back(customer_id);
+                            
+                            double altFlightTime = calculateTripFlightTime(testTrip, alt_drone);
+                            double altEnergy = evaluateSingleDroneTrip(testTrip, alt_drone);
+                            double altDemand = instance.customers[customer_idx].demand;
+                            
+                            bool altTimeOK = (altFlightTime <= instance.droneParams[alt_drone].maxFlightTime);
+                            bool altEnergyOK = (altEnergy <= instance.droneParams[alt_drone].maxEnergy);
+                            bool altCapacityOK = (altDemand <= instance.droneParams[alt_drone].maxCapacity);
+                            
+                            if (altTimeOK && altEnergyOK && altCapacityOK) {
+                                // Found a feasible alternative drone!
+                                solution.droneRoutes[alt_drone].push_back(testTrip);
+                                assignedToOtherDrone = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!assignedToOtherDrone) {
+                        // No drone can serve → fallback to truck (least loaded)
+                        int bestTruck = 0;
+                        int minCustomers = solution.truckRoutes[0].customers.size();
+                        for (int t = 1; t < instance.numTrucks; t++) {
+                            if (solution.truckRoutes[t].customers.size() < minCustomers) {
+                                minCustomers = solution.truckRoutes[t].customers.size();
+                                bestTruck = t;
+                            }
+                        }
+                        solution.truckRoutes[bestTruck].customers.push_back(customer_id);
+                    }
+                } else {
+                    // Trip hợp lệ, thêm vào drone
+                    droneTrips.push_back(newTrip);
+                }
             }
             else
             {
@@ -154,12 +219,13 @@ double Decoder::evaluateSingleDroneTrip(const Route& trip, int droneId) {
 
     if (trip.isEmpty()) return 0;
     
+    const auto& droneParam = instance.droneParams[droneId];
     double totalEnergy = 0;
     double currentLoad = 0;
     const int height = 50;
 
-    double takeoffSpeed = instance.droneParams.takeoffSpeed;
-    double landingSpeed = instance.droneParams.landingSpeed;
+    double takeoffSpeed = droneParam.takeoffSpeed;
+    double landingSpeed = droneParam.landingSpeed;
 
     double takeoffTime = takeoffSpeed != 0 ? height / takeoffSpeed : 0;
     double landingTime = landingSpeed != 0 ? height / landingSpeed : 0;
@@ -172,9 +238,9 @@ double Decoder::evaluateSingleDroneTrip(const Route& trip, int droneId) {
     
     for (int custId : trip.customers) {
         double distance = instance.getDistance(prevNode, custId);
-        double travelTime = distance / instance.droneParams.cruiseSpeed;
+        double travelTime = distance / droneParam.cruiseSpeed;
         
-        double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
+        double power = droneParam.beta * currentLoad + droneParam.gamma;
         double energy = power * (takeoffTime + travelTime + landingTime);
         totalEnergy += energy;
         
@@ -185,9 +251,39 @@ double Decoder::evaluateSingleDroneTrip(const Route& trip, int droneId) {
     
     // Quay về depot (không có tải)
     double distance = instance.getDistance(prevNode, 0);
-    double travelTime = distance / instance.droneParams.cruiseSpeed;
-    double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
+    double travelTime = distance / droneParam.cruiseSpeed;
+    double power = droneParam.beta * currentLoad + droneParam.gamma;
     totalEnergy += power * (takeoffTime + travelTime + landingTime);
     
     return totalEnergy / 1000.0;    // Chuyển sang kJ
+}
+
+double Decoder::calculateTripFlightTime(const Route& trip, int droneId) {
+    // TÍNH THỜI GIAN BAY CỦA DRONE TRIP
+    if (trip.isEmpty()) return 0;
+    
+    const auto& droneParam = instance.droneParams[droneId];
+    const int height = 50;
+    double takeoffSpeed = droneParam.takeoffSpeed;
+    double landingSpeed = droneParam.landingSpeed;
+    double cruiseSpeed = droneParam.cruiseSpeed;
+    
+    double takeoffTime = takeoffSpeed != 0 ? height / takeoffSpeed : 0;
+    double landingTime = landingSpeed != 0 ? height / landingSpeed : 0;
+    
+    double totalTime = 0;
+    int prevNode = 0;
+    
+    for (int custId : trip.customers) {
+        double distance = instance.getDistance(prevNode, custId);
+        double travelTime = distance / cruiseSpeed;
+        totalTime += takeoffTime + travelTime + landingTime;
+        prevNode = custId;
+    }
+    
+    // Quay về depot
+    double distance = instance.getDistance(prevNode, 0);
+    totalTime += takeoffTime + (distance / cruiseSpeed) + landingTime;
+    
+    return totalTime;
 }

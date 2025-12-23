@@ -33,18 +33,33 @@ Chromosome::Chromosome(const std::vector<Customer> &customers, int numTechnician
         throw std::runtime_error("Error: There are staff-only customers but no technicians available.");
     }
 
-    // Phần 1: Tạo danh sách gán hợp lệ
+    // Phần 1: Tạo danh sách gán hợp lệ với ADAPTIVE STRATEGY
+    // HIGH-TRUCK cases (30+ trucks): Ưu tiên drones (70% drone, 30% truck)
+    // LOW-TRUCK cases: Balanced (50% drone, 50% truck)
+    bool highTruckCount = (numTechnicians >= 30);
+    double droneProbability = highTruckCount ? 0.70 : 0.50;  // Adaptive!
+    
     for (int i = 0; i < num_customers; ++i)
     {
         if ((*customers_)[i].isStaffOnly)
         {
+            // Staff-only MUST use truck
             std::uniform_int_distribution<size_t> distrib(0, technician_ids.size() - 1);
             assignment[i] = technician_ids[distrib(rng)];
         }
         else
         {
-            std::uniform_int_distribution<size_t> distrib(0, all_vehicle_ids.size() - 1);
-            assignment[i] = all_vehicle_ids[distrib(rng)];
+            // ADAPTIVE: Bias towards drones for high-truck cases
+            std::uniform_real_distribution<double> prob(0.0, 1.0);
+            if (prob(rng) < droneProbability && numDrones > 0) {
+                // Assign to drone (random drone ID)
+                std::uniform_int_distribution<int> droneDist(numTechnicians + 1, numTechnicians + numDrones);
+                assignment[i] = droneDist(rng);
+            } else {
+                // Assign to truck (random truck ID)
+                std::uniform_int_distribution<int> truckDist(1, numTechnicians);
+                assignment[i] = truckDist(rng);
+            }
         }
     }
 

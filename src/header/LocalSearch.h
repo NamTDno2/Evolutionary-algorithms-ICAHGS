@@ -17,7 +17,7 @@ private:
     
     // Tabu list: stores (customer_id, move_type) pairs
     std::set<std::pair<int, int>> tabuList;
-    int tabuTenure = 7;
+    int tabuTenure = 15;  // Tăng từ 10→15 cho diversification tốt hơn
     
     struct Move {
         enum Type { RELOCATE, SWAP, SWAP_STAR };
@@ -47,6 +47,21 @@ private:
     // Improvement 2: 2-opt for truck routes
     std::vector<int> twoOpt(const std::vector<int>& route);
     double calculateRouteDistance(const std::vector<int>& route);
+    
+    // NEW: Improvement 2b: 2-opt directly on solution
+    void twoOptTrucks(Solution& solution);
+    
+    // NEW: Or-opt operator for trucks (move sequence of 1-3 customers)
+    void orOptTrucks(Solution& solution);
+    
+    // NEW: Improvement 5: Smart drone-truck transfer
+    void smartDroneTruckTransfer(Solution& solution);
+    
+    // NEW: Improvement 6: Optimize drone trip sequences
+    void optimizeDroneTrips(Solution& solution);
+    
+    // NEW: GENI (Generalized Insertion) - Remove and reinsert at best position
+    void geniOperator(Solution& solution, int maxIterations = 50);
     
     // Improvement 3: Inter-truck swap
     void interTruckSwap(Solution& solution);

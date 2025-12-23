@@ -29,7 +29,7 @@ DroneParams readDroneParams(int index)
         droneParams.cruiseSpeed = item["cruiseSpeed [m/s]"].get<double>();
         droneParams.landingSpeed = item["landingSpeed [m/s]"].get<double>();
         droneParams.maxCapacity = item["capacity [kg]"].get<double>();
-        droneParams.maxEnergy = item["batteryPower [Joule]"].get<double>();
+        droneParams.maxEnergy = item["batteryPower [Joule]"].get<double>() / 1000.0;  // Convert J to kJ
         droneParams.beta = item["beta(w/kg)"].get<double>();
         droneParams.gamma = item["gama(w)"].get<double>();
     }
@@ -98,10 +98,11 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
     }
     
     // Read droneLimitationFightTime
+    double tempMaxFlightTime = 3600.0;  // Default value
     if (getline(file, line)) {
         auto parts = split(line, ' ');
         if (parts.size() >= 2) {
-            instance.droneParams.maxFlightTime = stod(parts[1]);
+            tempMaxFlightTime = stod(parts[1]);
         }
     }
     
@@ -137,19 +138,26 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
         }
     }
     
-    // Read Beta
+    // Read Beta (skip, will use from config)
     if (getline(file, line)) {
         // Skip "Beta" label
     }
     if (getline(file, line)) {
-        instance.droneParams.beta = stod(line);
+        // Skip beta value - using from drone config file instead
     }
     
     file.close();
     
-    double tempMaxFlight = instance.droneParams.maxFlightTime;
-    instance.droneParams = readDroneParams(3); // changable config (ENUM: 1, 2, 3, 4)
-    instance.droneParams.maxFlightTime = tempMaxFlight;
+    
+    // Read drone params for all drones (homogeneous fleet)
+    instance.droneParams.resize(instance.numDrones);
+    for (int i = 0; i < instance.numDrones; i++) {
+        // USE ONLY DRONE TYPE 4: low-speed-high-range
+        // (takeoffSpeed=7.8232, cruiseSpeed=15.6464, batteryPower=562990J)
+        int droneType = 4;  
+        instance.droneParams[i] = readDroneParams(droneType);
+        instance.droneParams[i].maxFlightTime = tempMaxFlightTime;
+    }
     
     instance.truckParams = readTruckParams();
     

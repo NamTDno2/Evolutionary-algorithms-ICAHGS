@@ -101,6 +101,8 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
         return true;
     }
     
+    const auto& droneParam = instance.droneParams[droneId];
+    
     double totalLoad = 0;
     for (int custId : route.customers) {
         if (instance.customers[custId-1].isStaffOnly) {
@@ -108,11 +110,11 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
         }
         totalLoad += instance.customers[custId - 1].demand;
     }
-    if (totalLoad > instance.droneParams.maxCapacity) {
+    if (totalLoad > droneParam.maxCapacity) {
         return false;
     }
 
-    if (calculateDroneEnergy(route) > instance.droneParams.maxEnergy) {
+    if (calculateDroneEnergy(route, droneId) > droneParam.maxEnergy) {
         return false;
     }
 
@@ -124,7 +126,7 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
             return false;  // Infeasible!
         }
         double distance = instance.getDistance(prevNode, custId);
-        double travelTime = distance / instance.droneParams.cruiseSpeed;
+        double travelTime = distance / droneParam.cruiseSpeed;
         currentTime += travelTime;
         
         double serviceTime = instance.customers[custId - 1].serviceTimeDrone;
@@ -134,7 +136,7 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     }
     
     double distance = instance.getDistance(prevNode, 0);
-    currentTime += distance / instance.droneParams.cruiseSpeed;
+    currentTime += distance / droneParam.cruiseSpeed;
     
     route.completionTime = currentTime;
     
@@ -149,7 +151,7 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
             return false;  // Infeasible!
         }
         double distance = instance.getDistance(prevNode, custId);
-        double travelTime = distance / instance.droneParams.cruiseSpeed;
+        double travelTime = distance / droneParam.cruiseSpeed;
         currentTime += travelTime;
         
         double collectTime = currentTime;
@@ -201,19 +203,20 @@ double SolutionEvaluator::calculateTruckTravelTime(double startTime, double dist
     return time;
 }
 
-double SolutionEvaluator::calculateDroneEnergy(const Route& route) {
+double SolutionEvaluator::calculateDroneEnergy(const Route& route, int droneId) {
     
     // TÍNH NĂNG LƯỢNG TIÊU THỤ CỦA DRONE
     // Energy = (β * Load + γ) * flightTime
 
     if (route.isEmpty()) return 0;
     
+    const auto& droneParam = instance.droneParams[droneId];
     double totalEnergy = 0;
     double currentLoad = 0;
     const int height = 50;
 
-    double takeoffSpeed = instance.droneParams.takeoffSpeed;
-    double landingSpeed = instance.droneParams.landingSpeed;
+    double takeoffSpeed = droneParam.takeoffSpeed;
+    double landingSpeed = droneParam.landingSpeed;
 
     double takeoffTime = takeoffSpeed != 0 ? height / takeoffSpeed : 0;
     double landingTime = landingSpeed != 0 ? height / landingSpeed : 0;
@@ -226,9 +229,9 @@ double SolutionEvaluator::calculateDroneEnergy(const Route& route) {
     
     for (int custId : route.customers) {
         double distance = instance.getDistance(prevNode, custId);
-        double travelTime = distance / instance.droneParams.cruiseSpeed;
+        double travelTime = distance / droneParam.cruiseSpeed;
         
-        double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
+        double power = droneParam.beta * currentLoad + droneParam.gamma;
         double energy = power * (takeoffTime + travelTime + landingTime);
         totalEnergy += energy;
         
@@ -239,8 +242,8 @@ double SolutionEvaluator::calculateDroneEnergy(const Route& route) {
     
     // Quay về depot (không có tải)
     double distance = instance.getDistance(prevNode, 0);
-    double travelTime = distance / instance.droneParams.cruiseSpeed;
-    double power = instance.droneParams.beta * currentLoad + instance.droneParams.gamma;
+    double travelTime = distance / droneParam.cruiseSpeed;
+    double power = droneParam.beta * currentLoad + droneParam.gamma;
     totalEnergy += power * (takeoffTime + travelTime + landingTime);
     
     return totalEnergy / 1000.0;    // Chuyển sang kJ

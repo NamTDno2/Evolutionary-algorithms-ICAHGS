@@ -26,7 +26,7 @@ private:
     double calculateTruckTravelTime(double startTime, double distance);
     
     // Calculate drone energy consumption
-    double calculateDroneEnergy(const Route& route);
+    double calculateDroneEnergy(const Route& route, int droneId);
     
     // Get speed factor at given time
     double getSpeedFactor(double time) const;
