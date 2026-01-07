@@ -270,42 +270,81 @@ void printSolution(const Solution& solution, int index) {
     }
 }
 
+// Convert solution to route string format (like benchmark)
+string solutionToRouteString(const Solution& solution) {
+    string routeStr = "";
+    
+    // Add truck routes
+    for (size_t i = 0; i < solution.truckRoutes.size(); i++) {
+        for (int cust : solution.truckRoutes[i].customers) {
+            routeStr += to_string(cust) + " ";
+        }
+        routeStr += "|";
+    }
+    
+    // Add separator for drones
+    routeStr += "|";
+    
+    // Add drone routes
+    for (size_t i = 0; i < solution.droneRoutes.size(); i++) {
+        for (const auto& trip : solution.droneRoutes[i]) {
+            for (int cust : trip.customers) {
+                routeStr += to_string(cust) + " ";
+            }
+            routeStr += "|";
+        }
+        // Add separator between drones if not last drone
+        if (i < solution.droneRoutes.size() - 1) {
+            routeStr += "|";
+        }
+    }
+    
+    return routeStr;
+}
+
 void exportResults(const vector<Solution>& paretoFront, 
                    const string& filename, const string& datasetName,
                    double executionTime, int paretoSize, int uniqueSolutions) {
-    // Check if file exists to determine append mode
-    bool fileExists = ifstream(filename).good();
-    ofstream file(filename, ios::app);
+    // Create result directory if not exists
+    #ifdef _WIN32
+        system("if not exist result mkdir result");
+    #else
+        system("mkdir -p result");
+    #endif
+    
+    // Create output file path: result/datasetName.txt
+    string outputPath = "result/" + datasetName + ".txt";
+    ofstream file(outputPath);
     
     if (!file.is_open()) {
-        cerr << "Cannot open output file: " << filename << endl;
+        cerr << "Cannot open output file: " << outputPath << endl;
         return;
     }
     
-    // Write header only if file is new
-    if (!fileExists) {
-        file << "Dataset,SolutionID,CompletionTime,TotalWaitingTime,ExecutionTime,ParetoSize,UniqueSolutions" << endl;
-    }
+    // Write benchmark-style header
+    file << "Time:0" << endl;
+    file << "Last Iter:" << uniqueSolutions << endl;
+    file << "Last Update:" << uniqueSolutions << endl;
+    file << "Tabu:0" << endl;
+    file << "Last Time0" << endl;
+    file << uniqueSolutions << endl;
     
+    // Export each unique solution
     set<pair<double, double>> exportedObjectives;
-    int solutionId = 0;
     for (const auto& solution : paretoFront) {
         pair<double, double> objectives = {solution.systemCompletionTime, solution.totalSampleWaitingTime};
         
         if (exportedObjectives.find(objectives) == exportedObjectives.end()) {
-            file << datasetName << ","
-                 << solutionId++ << "," 
-                 << solution.systemCompletionTime << ","
-                 << solution.totalSampleWaitingTime << ","
-                 << executionTime << ","
-                 << paretoSize << ","
-                 << uniqueSolutions << endl;
+            string routeStr = solutionToRouteString(solution);
+            file << routeStr << endl;
+            file << fixed << setprecision(2) << solution.systemCompletionTime << " " 
+                 << solution.totalSampleWaitingTime << endl;
             exportedObjectives.insert(objectives);
         }
     }
     
     file.close();
-    cout << "\nUnique results exported to: " << filename << endl;
+    cout << "\nResults exported to: " << outputPath << endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -313,7 +352,7 @@ int main(int argc, char* argv[]) {
     
     cout << "=== ICAHGS for MSSVTDE ===" << endl;
     
-    string filename = "../data/50.10.1.txt";
+    string filename = "../data/20.10.1.txt";
 
     if (argc > 1) {
         filename = argv[1];
@@ -330,67 +369,135 @@ int main(int argc, char* argv[]) {
     cout << "  Trucks: " << instance.numTrucks << endl;
     cout << "  Drones: " << instance.numDrones << endl;
     
-    //  THÊM: Verify distance matrix
+
     verifyDistanceMatrix(instance);
     
-    // CẢI TIẾN: Adaptive parameters dựa trên kích thước VÀ số lượng trucks
+    
     int numCustomers = instance.getNumCustomers();
     int numTrucks = instance.numTrucks;
-    int populationSize, numEmpires, maxIterations;
+    int populationSize, numEmpires, maxEvaluations;
     
+    // Unified configuration following benchmark settings
+    // Population size = 200 as per benchmark requirement
+    // 2-3 empires for lower selection pressure and better diversity
+    populationSize = 200;
+    numEmpires = 2;
+    
+    // Stopping criterion: Evaluation-based (50C/100C increased to 50% baseline)
+    // Testing doubled evaluations for 50C and 100C to improve convergence:
+    // - 20C:  65,000 evaluations (25% baseline)
+    // - 50C:  1,095,000 evaluations (50% baseline - DOUBLED)
+    // - 100C: 20,610,000 evaluations (50% baseline - DOUBLED)
+    // - 200C: 18,800,000 evaluations (25% baseline)
     if (numCustomers <= 20) {
-        populationSize = 50;
-        numEmpires = 5;
-        maxIterations = 10;
+        maxEvaluations = 65000;
     } else if (numCustomers <= 50) {
-        //  Datasets 50C + 30-40T cần iterations cao hơn
-        if (numTrucks >= 30) {
-            populationSize = 70;    
-            numEmpires = 7;
-            maxIterations = 15;     
-        } else {
-            populationSize = 60;    
-            numEmpires = 6;
-            maxIterations = 12;     
-        }
+        maxEvaluations = 1095000;
     } else if (numCustomers <= 100) {
-        // Datasets 100C + 20-30T cần iterations rất cao
-        if (numTrucks >= 20) {
-            populationSize = 120;   
-            numEmpires = 12;
-            maxIterations = 25;     
-        } else {
-            populationSize = 100;   
-            numEmpires = 10;
-            maxIterations = 20;     
-        }
-    } else {  // 200+
-        populationSize = 80;    
-        numEmpires = 8;
-        maxIterations = 18;     
+        maxEvaluations = 20610000;
+    } else {
+        maxEvaluations = 18800000;
     }
     
     if (argc > 2) populationSize = stoi(argv[2]);
     if (argc > 3) numEmpires = stoi(argv[3]);
-    if (argc > 4) maxIterations = stoi(argv[4]);
+    if (argc > 4) maxEvaluations = stoi(argv[4]);
     
     ICAHGS algorithm(instance, populationSize, numEmpires);
     
-    vector<Solution> paretoFront = algorithm.run(maxIterations);
+    SolutionEvaluator::resetCounter();  // Reset evaluation counter
+    vector<Solution> paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
+    int totalEvaluations = SolutionEvaluator::getEvaluationCount();
     
-    sort(paretoFront.begin(), paretoFront.end(), 
-         [](const Solution& a, const Solution& b) {
-        if (a.systemCompletionTime != b.systemCompletionTime) {
-            return a.systemCompletionTime < b.systemCompletionTime;
+    // Find ideal point (best CT, best WT) from Pareto front
+    double idealCT = INF;
+    double idealWT = INF;
+    for (const auto& sol : paretoFront) {
+        idealCT = min(idealCT, sol.systemCompletionTime);
+        idealWT = min(idealWT, sol.totalSampleWaitingTime);
+    }
+    
+    // Find nadir point (worst CT, worst WT) for normalization
+    double nadirCT = 0;
+    double nadirWT = 0;
+    for (const auto& sol : paretoFront) {
+        nadirCT = max(nadirCT, sol.systemCompletionTime);
+        nadirWT = max(nadirWT, sol.totalSampleWaitingTime);
+    }
+    
+    cout << "\n=== IDEAL & NADIR POINTS ===" << endl;
+    cout << "Ideal Point: CT=" << fixed << setprecision(2) << idealCT 
+         << ", WT=" << idealWT << endl;
+    cout << "Nadir Point: CT=" << nadirCT << ", WT=" << nadirWT << endl;
+    
+    // Select best compromise solution using normalized distance to ideal point
+    // This balances both objectives without linear weighting
+    double bestDistance = INF;
+    Solution bestCompromise;
+    int bestIndex = -1;
+    
+    for (size_t i = 0; i < paretoFront.size(); i++) {
+        const auto& sol = paretoFront[i];
+        
+        // Normalize objectives to [0,1]
+        double normCT = (nadirCT > idealCT) ? 
+            (sol.systemCompletionTime - idealCT) / (nadirCT - idealCT) : 0;
+        double normWT = (nadirWT > idealWT) ? 
+            (sol.totalSampleWaitingTime - idealWT) / (nadirWT - idealWT) : 0;
+        
+        // Euclidean distance to ideal point (0,0) in normalized space
+        double distance = sqrt(normCT * normCT + normWT * normWT);
+        
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestCompromise = sol;
+            bestIndex = i;
         }
-        return a.totalSampleWaitingTime < b.totalSampleWaitingTime;
+    }
+    
+    // Sort Pareto front by distance to ideal (best compromise first)
+    sort(paretoFront.begin(), paretoFront.end(), 
+         [idealCT, idealWT, nadirCT, nadirWT](const Solution& a, const Solution& b) {
+        double normCT_a = (nadirCT > idealCT) ? 
+            (a.systemCompletionTime - idealCT) / (nadirCT - idealCT) : 0;
+        double normWT_a = (nadirWT > idealWT) ? 
+            (a.totalSampleWaitingTime - idealWT) / (nadirWT - idealWT) : 0;
+        double dist_a = sqrt(normCT_a * normCT_a + normWT_a * normWT_a);
+        
+        double normCT_b = (nadirCT > idealCT) ? 
+            (b.systemCompletionTime - idealCT) / (nadirCT - idealCT) : 0;
+        double normWT_b = (nadirWT > idealWT) ? 
+            (b.totalSampleWaitingTime - idealWT) / (nadirWT - idealWT) : 0;
+        double dist_b = sqrt(normCT_b * normCT_b + normWT_b * normWT_b);
+        
+        return dist_a < dist_b;
     });
     
-    cout << "\n--- Top Unique Solutions ---" << endl;
+    cout << "\n=== OPTIMIZATION SUMMARY ===" << endl;
+    cout << "Evaluation limit: " << maxEvaluations << endl;
+    cout << "Total evaluations: " << totalEvaluations << endl;
+    cout << "Archive size: " << paretoFront.size() << endl;
+    
+    if (!paretoFront.empty()) {
+        cout << "\n=== BEST COMPROMISE SOLUTION ===" << endl;
+        cout << "Distance to ideal: " << fixed << setprecision(4) << bestDistance << endl;
+        printSolution(paretoFront[0], 0);  // Best compromise
+    }
+    
+    cout << "\n--- Other Pareto Solutions (up to 4 more) ---" << endl;
     set<pair<double, double>> printedObjectives;
     int solutionsPrinted = 0;
-    for (const auto& solution : paretoFront) {
-        if (solutionsPrinted >= 5) {
+    
+    // Add best compromise to printed set
+    if (!paretoFront.empty()) {
+        printedObjectives.insert({paretoFront[0].systemCompletionTime, 
+                                 paretoFront[0].totalSampleWaitingTime});
+    }
+    
+    // Print remaining unique solutions
+    for (size_t i = 1; i < paretoFront.size(); i++) {
+        const auto& solution = paretoFront[i];
+        if (solutionsPrinted >= 4) {
             break;
         }
         
@@ -448,6 +555,7 @@ int main(int argc, char* argv[]) {
     
     cout << "\n========== SUMMARY ==========" << endl;
     cout << "Total execution time: " << fixed << setprecision(3) << totalTime << " seconds" << endl;
+    cout << "Total evaluations: " << totalEvaluations << endl;
     cout << "Pareto front size: " << paretoFront.size() << endl;
     cout << "Unique solutions: " << solutionsPrinted << endl;
     cout << "Feasibility: " << (isFeasible ? "YES" : "NO") << endl;

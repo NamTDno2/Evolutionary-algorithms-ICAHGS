@@ -13,7 +13,7 @@ std::vector<int> LocalSearch::getCandidateCustomers(const Solution& solution, in
     
     for (const auto& route : solution.truckRoutes) {
         for (int cust : route.customers) {
-            // ✅ VALIDATE: Only add valid customer IDs
+            //  VALIDATE: Only add valid customer IDs
             if (cust >= 1 && cust <= (int)instance.customers.size() && 
                 visited.find(cust) == visited.end()) {
                 candidates.push_back(cust);
@@ -25,7 +25,7 @@ std::vector<int> LocalSearch::getCandidateCustomers(const Solution& solution, in
     for (const auto& trips : solution.droneRoutes) {
         for (const auto& trip : trips) {
             for (int cust : trip.customers) {
-                // ✅ VALIDATE: Only add valid customer IDs
+                //  VALIDATE: Only add valid customer IDs
                 if (cust >= 1 && cust <= (int)instance.customers.size() && 
                     visited.find(cust) == visited.end()) {
                     candidates.push_back(cust);
@@ -78,7 +78,7 @@ Solution LocalSearch::improve(const Solution& solution, int maxIterations) {
     evaluator.evaluate(current);
     best = current;
     
-    // CẢI TIẾN: Early stopping - dừng sớm nếu không cải thiện
+    //  Early stopping - dừng sớm nếu không cải thiện
     int noImprovementLimit = maxIterations / 3;
     
     for (int iter = 0; iter < maxIterations; iter++) {
@@ -112,6 +112,8 @@ Solution LocalSearch::improve(const Solution& solution, int maxIterations) {
     
     // Final cleanup: split/move any remaining long drone trips
     splitLongDroneTrips(best);
+    // OPTIMIZATION: Only evaluate if splitLongDroneTrips made changes
+    // Since splitLongDroneTrips modifies routes, we need this evaluation
     evaluator.evaluate(best);
     
     return best;
@@ -123,7 +125,6 @@ LocalSearch::Move LocalSearch::findBestMove(const Solution& solution) {
     Move bestMove;
     bestMove.deltaCost = INF;
     
-    // Tăng từ 50→70 candidates để explore nhiều hơn
     std::vector<int> allCustomers = getCandidateCustomers(solution, 70);
     
     double currentCost = solution.systemCompletionTime * 0.5 + 
@@ -685,7 +686,7 @@ void LocalSearch::orOptTrucks(Solution& solution) {
 
 // ========== NEW IMPROVEMENT: SMART DRONE-TRUCK TRANSFER ==========
 void LocalSearch::smartDroneTruckTransfer(Solution& solution) {
-    // ✅ VALIDATE: Check solution structure
+    //  VALIDATE: Check solution structure
     if (solution.droneRoutes.empty() || solution.truckRoutes.empty()) {
         return;  // Nothing to transfer
     }
@@ -712,7 +713,7 @@ void LocalSearch::smartDroneTruckTransfer(Solution& solution) {
             if (trips[t].customers.size() == 1) {
                 int cust = trips[t].customers[0];
                 
-                // ✅ VALIDATE: Check if customer ID is valid
+                //  VALIDATE: Check if customer ID is valid
                 if (cust < 1 || cust > (int)instance.customers.size()) {
                     continue;  // Skip invalid customer IDs
                 }

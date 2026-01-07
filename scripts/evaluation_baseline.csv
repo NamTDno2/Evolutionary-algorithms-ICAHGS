@@ -1,0 +1,5 @@
+Problem Size,Time Limit (s),Total Evaluations,Total Iterations,Eval per Iteration,Archive Size
+20C,20,259497,520,499,3
+50C,200,2188251,2466,887,723
+100C,1000,41211391,728,56609,1120
+200C,2000,75201045,15020,5000,850

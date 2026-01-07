@@ -17,7 +17,7 @@ private:
     
     // Tabu list: stores (customer_id, move_type) pairs
     std::set<std::pair<int, int>> tabuList;
-    int tabuTenure = 15;  // Tăng từ 10→15 cho diversification tốt hơn
+    int tabuTenure = 10;  // Benchmark standard value
     
     struct Move {
         enum Type { RELOCATE, SWAP, SWAP_STAR };

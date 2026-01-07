@@ -15,6 +15,8 @@ public:
     ICAHGS(const Instance& inst, int popSize = 50, int numEmpires = 5);
     ~ICAHGS();  // ← THÊM DESTRUCTOR
     std::vector<Solution> run(int maxIterations = 100);
+    std::vector<Solution> runWithEvaluationLimit(int maxEvaluations);
+    std::vector<Solution> runWithTimeLimit(double maxTimeSeconds);
 
 private:
     const Instance& instance;

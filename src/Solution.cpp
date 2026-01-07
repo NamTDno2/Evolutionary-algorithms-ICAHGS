@@ -11,7 +11,11 @@ using namespace std;
 
 // === SolutionEvaluator Class ===
 
+// Initialize static evaluation counter
+int SolutionEvaluator::evaluationCount = 0;
+
 void SolutionEvaluator::evaluate(Solution& solution) {
+    evaluationCount++;  // Increment counter on each evaluation
     double maxCompletionTime = 0;
     double totalWaiting = 0;
     
@@ -73,7 +77,7 @@ void SolutionEvaluator::evaluateTruckRoute(Route& route, int truckId) {
     route.completionTime = currentTime;
     
     // Calculate waiting time
-    double returnTime = currentTime;    // Lưu thời gian quay về depot
+    double completionTime = currentTime;    // Save completion time
     currentTime = 0;
     prevNode = 0;
     
@@ -82,11 +86,11 @@ void SolutionEvaluator::evaluateTruckRoute(Route& route, int truckId) {
         double travelTime = calculateTruckTravelTime(currentTime, distance);
         currentTime += travelTime;
         
-        double collectTime = currentTime;
         double serviceTime = instance.customers[custId - 1].serviceTimeTruck;
         currentTime += serviceTime;
         
-        totalWaiting += (returnTime - collectTime);
+        double timeAfterService = currentTime;
+        totalWaiting += (completionTime - timeAfterService);
         
         prevNode = custId;
     }
@@ -121,13 +125,17 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     double currentTime = 0;
     int prevNode = 0;
     
+    const double height = 50;
+    double takeoffTime = droneParam.takeoffSpeed != 0 ? height / droneParam.takeoffSpeed : 0;
+    double landingTime = droneParam.landingSpeed != 0 ? height / droneParam.landingSpeed : 0;
+    
     for (int custId : route.customers) {
         if (instance.customers[custId-1].isStaffOnly) {
             return false;  // Infeasible!
         }
         double distance = instance.getDistance(prevNode, custId);
         double travelTime = distance / droneParam.cruiseSpeed;
-        currentTime += travelTime;
+        currentTime += (takeoffTime + travelTime + landingTime);
         
         double serviceTime = instance.customers[custId - 1].serviceTimeDrone;
         currentTime += serviceTime;
@@ -136,12 +144,13 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
     }
     
     double distance = instance.getDistance(prevNode, 0);
-    currentTime += distance / droneParam.cruiseSpeed;
+    double travelTime = distance / droneParam.cruiseSpeed;
+    currentTime += (takeoffTime + travelTime + landingTime);
     
     route.completionTime = currentTime;
     
     // Calculate waiting time
-    double returnTime = currentTime;
+    double completionTime = currentTime;
     currentTime = 0;
     prevNode = 0;
     
@@ -152,13 +161,13 @@ bool SolutionEvaluator::evaluateDroneRoute(Route& route, int droneId) {
         }
         double distance = instance.getDistance(prevNode, custId);
         double travelTime = distance / droneParam.cruiseSpeed;
-        currentTime += travelTime;
+        currentTime += (takeoffTime + travelTime + landingTime);
         
-        double collectTime = currentTime;
         double serviceTime = instance.customers[custId - 1].serviceTimeDrone;
         currentTime += serviceTime;
         
-        totalWaiting += (returnTime - collectTime);
+        double timeAfterService = currentTime;
+        totalWaiting += (completionTime - timeAfterService);
         prevNode = custId;
     }
     

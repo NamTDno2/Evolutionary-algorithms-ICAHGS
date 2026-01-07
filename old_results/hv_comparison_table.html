@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Hypervolume Comparison Table</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        th {
+            background-color: #34495e;
+            color: white;
+            padding: 12px;
+            text-align: center;
+            font-weight: 600;
+            border: 1px solid #2c3e50;
+        }
+        td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #ecf0f1;
+        }
+        .positive {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .negative {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .neutral {
+            color: #7f8c8d;
+        }
+        .dataset-header {
+            background-color: #3498db !important;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .summary-row {
+            background-color: #f39c12 !important;
+            color: white;
+            font-weight: bold;
+        }
+        .legend {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 15px;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 5px;
+        }
+        .legend h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .legend p {
+            margin: 5px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <h1>Hypervolume Comparison: ICAHGS vs Benchmark</h1>
+    <div class="subtitle">Test Results on 4 Random Instances (20C, 50C, 100C, 200C)</div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Dataset</th>
+                <th>Grid Size</th>
+                <th>HV Ratio</th>
+                <th>Gap HV (%)</th>
+                <th>Domination<br/>(+/=/−)</th>
+                <th>IGD</th>
+                <th>Result</th>
+            </tr>
+        </thead>
+        <tbody>
+
+            <tr>
+                <td><strong>20C</strong></td>
+                <td>5</td>
+                <td>1.0470</td>
+                <td class="positive">+4.70%</td>
+                <td>3/0/1</td>
+                <td>0.6286</td>
+                <td class="positive">✓ Better</td>
+            </tr>
+
+            <tr>
+                <td><strong>20C</strong></td>
+                <td>10</td>
+                <td>1.5472</td>
+                <td class="positive">+54.72%</td>
+                <td>3/0/1</td>
+                <td>0.3926</td>
+                <td class="positive">✓ Better</td>
+            </tr>
+
+            <tr>
+                <td><strong>20C</strong></td>
+                <td>20</td>
+                <td>1.1503</td>
+                <td class="positive">+15.03%</td>
+                <td>3/0/1</td>
+                <td>0.2811</td>
+                <td class="positive">✓ Better</td>
+            </tr>
+
+            <tr class="dataset-header">
+                <td colspan="7">50C Summary</td>
+            </tr>
+
+            <tr>
+                <td><strong>50C</strong></td>
+                <td>10</td>
+                <td>1.8389</td>
+                <td class="positive">+83.89%</td>
+                <td>4/0/0</td>
+                <td>0.5721</td>
+                <td class="positive">✓ Better</td>
+            </tr>
+
+            <tr>
+                <td><strong>50C</strong></td>
+                <td>20</td>
+                <td>1.0055</td>
+                <td class="positive">+0.55%</td>
+                <td>3/0/1</td>
+                <td>0.3701</td>
+                <td class="positive">✓ Better</td>
+            </tr>
+
+            <tr>
+                <td><strong>50C</strong></td>
+                <td>30</td>
+                <td>0.0929</td>
+                <td class="negative">-90.71%</td>
+                <td>0/0/4</td>
+                <td>0.9762</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr>
+                <td><strong>50C</strong></td>
+                <td>40</td>
+                <td>0.2499</td>
+                <td class="negative">-75.01%</td>
+                <td>0/0/4</td>
+                <td>0.7763</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr class="dataset-header">
+                <td colspan="7">100C Summary</td>
+            </tr>
+
+            <tr>
+                <td><strong>100C</strong></td>
+                <td>10</td>
+                <td>1.1619</td>
+                <td class="positive">+16.19%</td>
+                <td>2/0/2</td>
+                <td>0.6142</td>
+                <td class="positive">✓ Better</td>
+            </tr>
+
+            <tr>
+                <td><strong>100C</strong></td>
+                <td>20</td>
+                <td>0.3972</td>
+                <td class="negative">-60.28%</td>
+                <td>0/0/4</td>
+                <td>0.7551</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr>
+                <td><strong>100C</strong></td>
+                <td>30</td>
+                <td>0.1450</td>
+                <td class="negative">-85.50%</td>
+                <td>0/0/4</td>
+                <td>0.9247</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr>
+                <td><strong>100C</strong></td>
+                <td>40</td>
+                <td>0.6709</td>
+                <td class="negative">-32.91%</td>
+                <td>0/0/4</td>
+                <td>0.6550</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr class="dataset-header">
+                <td colspan="7">200C Summary</td>
+            </tr>
+
+            <tr>
+                <td><strong>200C</strong></td>
+                <td>10</td>
+                <td>1.1665</td>
+                <td class="positive">+16.65%</td>
+                <td>3/0/1</td>
+                <td>0.6556</td>
+                <td class="positive">✓ Better</td>
+            </tr>
+
+            <tr>
+                <td><strong>200C</strong></td>
+                <td>20</td>
+                <td>0.6667</td>
+                <td class="negative">-33.33%</td>
+                <td>0/0/4</td>
+                <td>0.6109</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr>
+                <td><strong>200C</strong></td>
+                <td>30</td>
+                <td>0.3411</td>
+                <td class="negative">-65.89%</td>
+                <td>0/0/4</td>
+                <td>0.8520</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr>
+                <td><strong>200C</strong></td>
+                <td>40</td>
+                <td>0.0893</td>
+                <td class="negative">-91.07%</td>
+                <td>0/0/4</td>
+                <td>1.0118</td>
+                <td class="negative">✗ Worse</td>
+            </tr>
+
+            <tr class="summary-row">
+                <td colspan="7">OVERALL SUMMARY</td>
+            </tr>
+
+            <tr>
+                <td><strong>20C</strong></td>
+                <td colspan="2">3 instances</td>
+                <td class="positive"><strong>+24.82%</strong></td>
+                <td colspan="3">Average HV Gap</td>
+            </tr>
+
+            <tr>
+                <td><strong>50C</strong></td>
+                <td colspan="2">4 instances</td>
+                <td class="negative"><strong>-20.32%</strong></td>
+                <td colspan="3">Average HV Gap</td>
+            </tr>
+
+            <tr>
+                <td><strong>100C</strong></td>
+                <td colspan="2">4 instances</td>
+                <td class="negative"><strong>-40.62%</strong></td>
+                <td colspan="3">Average HV Gap</td>
+            </tr>
+
+            <tr>
+                <td><strong>200C</strong></td>
+                <td colspan="2">4 instances</td>
+                <td class="negative"><strong>-43.41%</strong></td>
+                <td colspan="3">Average HV Gap</td>
+            </tr>
+
+            <tr class="summary-row">
+                <td><strong>OVERALL</strong></td>
+                <td colspan="2">15 instances</td>
+                <td class="negative"><strong>-22.86%</strong></td>
+                <td colspan="3">Average Across All Sizes</td>
+            </tr>
+
+        </tbody>
+    </table>
+    
+    <div class="legend">
+        <h3>Legend:</h3>
+        <p><strong>HV Ratio:</strong> Hypervolume(Our) / Hypervolume(Benchmark). Values > 1.0 indicate better performance.</p>
+        <p><strong>Gap HV (%):</strong> Percentage improvement over benchmark. Positive = better, negative = worse.</p>
+        <p><strong>Domination (+/=/−):</strong> Number of solutions that dominate/equal/dominated by benchmark.</p>
+        <p><strong>IGD:</strong> Inverted Generational Distance. Lower values indicate better convergence to benchmark front.</p>
+    </div>
+    
+    <div class="subtitle" style="margin-top: 30px;">
+        Generated on: 2026-01-06 18:03:57
+    </div>
+</body>
+</html>

@@ -13,6 +13,11 @@ public:
     
     void evaluate(Solution& solution);
     
+    // Evaluation counter for stopping criterion
+    static int evaluationCount;
+    static void resetCounter() { evaluationCount = 0; }
+    static int getEvaluationCount() { return evaluationCount; }
+    
 private:
     const Instance& instance;
     
