@@ -57,8 +57,22 @@ TruckParams readTruckParams() {
 
         size_t pos = key.find('-');
         if (pos != std::string::npos) {
-            startHour = std::stoi(key.substr(0, pos));
-            endHour = std::stoi(key.substr(pos + 1));
+            try {
+                std::string startStr = key.substr(0, pos);
+                std::string endStr = key.substr(pos + 1);
+                // Trim whitespace
+                startStr.erase(0, startStr.find_first_not_of(" \t\r\n"));
+                startStr.erase(startStr.find_last_not_of(" \t\r\n") + 1);
+                endStr.erase(0, endStr.find_first_not_of(" \t\r\n"));
+                endStr.erase(endStr.find_last_not_of(" \t\r\n") + 1);
+                if (!startStr.empty() && !endStr.empty()) {
+                    startHour = std::stoi(startStr);
+                    endHour = std::stoi(endStr);
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: Failed to parse time interval key '" << key << "': " << e.what() << std::endl;
+                continue;
+            }
         }
 
         int startSec = startHour * 3600;
@@ -84,16 +98,26 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
     // Read number_staff (giả sử dòng có dạng "key value")
     if (getline(file, line)) {
         auto parts = split(line, ' ');
-        if (parts.size() >= 2) {
-            instance.numTrucks = stoi(parts[1]);
+        if (parts.size() >= 2 && !parts[1].empty()) {
+            try {
+                instance.numTrucks = stoi(parts[1]);
+            } catch (const std::exception& e) {
+                cerr << "Error parsing numTrucks: " << e.what() << endl;
+                return false;
+            }
         }
     }
     
     // Read number_drone
     if (getline(file, line)) {
         auto parts = split(line, ' ');
-        if (parts.size() >= 2) {
-            instance.numDrones = stoi(parts[1]);
+        if (parts.size() >= 2 && !parts[1].empty()) {
+            try {
+                instance.numDrones = stoi(parts[1]);
+            } catch (const std::exception& e) {
+                cerr << "Error parsing numDrones: " << e.what() << endl;
+                return false;
+            }
         }
     }
     
@@ -101,8 +125,13 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
     double tempMaxFlightTime = 3600.0;  // Default value
     if (getline(file, line)) {
         auto parts = split(line, ' ');
-        if (parts.size() >= 2) {
-            tempMaxFlightTime = stod(parts[1]);
+        if (parts.size() >= 2 && !parts[1].empty()) {
+            try {
+                tempMaxFlightTime = stod(parts[1]);
+            } catch (const std::exception& e) {
+                cerr << "Error parsing maxFlightTime: " << e.what() << endl;
+                return false;
+            }
         }
     }
     
@@ -110,8 +139,13 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
     int numCustomers = 0;
     if (getline(file, line)) {
         auto parts = split(line, ' ');
-        if (parts.size() >= 2) {
-            numCustomers = stoi(parts[1]);
+        if (parts.size() >= 2 && !parts[1].empty()) {
+            try {
+                numCustomers = stoi(parts[1]);
+            } catch (const std::exception& e) {
+                cerr << "Error parsing numCustomers: " << e.what() << endl;
+                return false;
+            }
         }
     }
     
@@ -126,14 +160,20 @@ bool InputReader::readInstance(const string& filename, Instance& instance) {
                 Customer cust;
                 cust.id = i + 1;
                 
-                cust.x = stod(parts[0]);
-                cust.y = stod(parts[1]);
-                cust.demand = stod(parts[2]);
-                cust.isStaffOnly = (stoi(parts[3]) == 1);
-                cust.serviceTimeTruck = stod(parts[4]);
-                cust.serviceTimeDrone = stod(parts[5]);
-                
-                instance.customers.push_back(cust);
+                try {
+                    cust.x = stod(parts[0]);
+                    cust.y = stod(parts[1]);
+                    cust.demand = stod(parts[2]);
+                    cust.isStaffOnly = (stoi(parts[3]) == 1);
+                    cust.serviceTimeTruck = stod(parts[4]);
+                    cust.serviceTimeDrone = stod(parts[5]);
+                    
+                    instance.customers.push_back(cust);
+                } catch (const std::exception& e) {
+                    cerr << "Error parsing customer " << (i+1) << ": " << e.what() << endl;
+                    cerr << "Line content: " << line << endl;
+                    return false;
+                }
             }
         }
     }

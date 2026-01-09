@@ -305,15 +305,15 @@ string solutionToRouteString(const Solution& solution) {
 void exportResults(const vector<Solution>& paretoFront, 
                    const string& filename, const string& datasetName,
                    double executionTime, int paretoSize, int uniqueSolutions) {
-    // Create result_final_hybrid directory for final optimal configuration
+    // Create result_50c_100c_50pct directory for 50% baseline test
     #ifdef _WIN32
-        system("if not exist result_final_hybrid mkdir result_final_hybrid");
+        system("if not exist result_50c_100c_50pct mkdir result_50c_100c_50pct");
     #else
-        system("mkdir -p result_final_hybrid");
+        system("mkdir -p result_50c_100c_50pct");
     #endif
     
-    // Create output file path: result_final_hybrid/datasetName.txt
-    string outputPath = "result_final_hybrid/" + datasetName + ".txt";
+    // Create output file path: result_50c_100c_50pct/datasetName.txt
+    string outputPath = "result_50c_100c_50pct/" + datasetName + ".txt";
     ofstream file(outputPath);
     
     if (!file.is_open()) {
@@ -381,7 +381,7 @@ int main(int argc, char* argv[]) {
     // - 20C/200C: Use maxEvaluation (proven to work well)
     // - 50C/100C: Use maxIteration (proven superior to maxEvaluation)
     populationSize = 200;
-    numEmpires = 2;
+    numEmpires = 3;
     
     // Parse command line arguments BEFORE creating algorithm
     if (argc > 2) populationSize = stoi(argv[2]);
@@ -392,25 +392,20 @@ int main(int argc, char* argv[]) {
     
     vector<Solution> paretoFront;
     
-    // Hybrid stopping criterion based on empirical results:
-    // 20C: maxEvaluation = 65,000 (75% win rate) ✅
-    // 50C: maxIteration = 12 (43.8% win rate) ✅ BEST
-    // 100C: maxIteration = 25 (12.5% win rate) ✅ BEST
-    // 200C: maxEvaluation = 18,800,000 (68.8% win rate) ✅
     if (numCustomers <= 20) {
-        int maxEvaluations = 65000;
+        int maxEvaluations = 65000;  
         if (argc > 4) maxEvaluations = stoi(argv[4]);
         paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     } else if (numCustomers <= 50) {
-        int maxIterations = 12;
-        if (argc > 4) maxIterations = stoi(argv[4]);
-        paretoFront = algorithm.run(maxIterations);
+        int maxEvaluations = 1095000;  // 50% baseline (2,190,000 * 0.50)
+        if (argc > 4) maxEvaluations = stoi(argv[4]);
+        paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     } else if (numCustomers <= 100) {
-        int maxIterations = 25;
-        if (argc > 4) maxIterations = stoi(argv[4]);
-        paretoFront = algorithm.run(maxIterations);
+        int maxEvaluations = 20610000;  // 50% baseline (41,220,000 * 0.50)
+        if (argc > 4) maxEvaluations = stoi(argv[4]);
+        paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     } else {
-        int maxEvaluations = 18800000;
+        int maxEvaluations = 18800000;  
         if (argc > 4) maxEvaluations = stoi(argv[4]);
         paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     }
