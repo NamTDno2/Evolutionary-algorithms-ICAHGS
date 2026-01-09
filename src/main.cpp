@@ -377,9 +377,7 @@ int main(int argc, char* argv[]) {
     int numTrucks = instance.numTrucks;
     int populationSize, numEmpires;
     
-    // FINAL HYBRID CONFIGURATION (OPTIMAL):
-    // - 20C/200C: Use maxEvaluation (proven to work well)
-    // - 50C/100C: Use maxIteration (proven superior to maxEvaluation)
+    
     populationSize = 200;
     numEmpires = 3;
     
@@ -393,19 +391,19 @@ int main(int argc, char* argv[]) {
     vector<Solution> paretoFront;
     
     if (numCustomers <= 20) {
-        int maxEvaluations = 65000;  
+        int maxEvaluations = 130000;  
         if (argc > 4) maxEvaluations = stoi(argv[4]);
         paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     } else if (numCustomers <= 50) {
-        int maxEvaluations = 1095000;  // 50% baseline (2,190,000 * 0.50)
+        int maxEvaluations = 1095000;  
         if (argc > 4) maxEvaluations = stoi(argv[4]);
         paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     } else if (numCustomers <= 100) {
-        int maxEvaluations = 20610000;  // 50% baseline (41,220,000 * 0.50)
+        int maxEvaluations = 20610000;  
         if (argc > 4) maxEvaluations = stoi(argv[4]);
         paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     } else {
-        int maxEvaluations = 18800000;  
+        int maxEvaluations = 37600000;  
         if (argc > 4) maxEvaluations = stoi(argv[4]);
         paretoFront = algorithm.runWithEvaluationLimit(maxEvaluations);
     }
